@@ -1,0 +1,154 @@
+{
+  "comment": "Importable RabbitMQ topology for MedServicePrice. Load via: rabbitmqadmin import definitions.json  OR  Management UI > Overview > Import definitions. vhost '/'.",
+  "vhosts": [
+    { "name": "/" }
+  ],
+  "exchanges": [
+    {
+      "name": "medprice.events",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "medprice.dlx",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "queues": [
+    {
+      "name": "q.parse.start",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "medprice.dlx",
+        "x-dead-letter-routing-key": "dlq.parse.start"
+      }
+    },
+    {
+      "name": "q.price.found",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "medprice.dlx",
+        "x-dead-letter-routing-key": "dlq.price.found",
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "q.parse.done",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "medprice.dlx",
+        "x-dead-letter-routing-key": "dlq.parse.done"
+      }
+    },
+    {
+      "name": "q.parse.error",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "medprice.dlx",
+        "x-dead-letter-routing-key": "dlq.parse.error"
+      }
+    },
+    {
+      "name": "q.enrich.request",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "medprice.dlx",
+        "x-dead-letter-routing-key": "dlq.enrich.request"
+      }
+    },
+    {
+      "name": "q.notify",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "medprice.dlx",
+        "x-dead-letter-routing-key": "dlq.notify"
+      }
+    },
+    {
+      "name": "q.dead_letter",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    }
+  ],
+  "bindings": [
+    {
+      "source": "medprice.events",
+      "vhost": "/",
+      "destination": "q.parse.start",
+      "destination_type": "queue",
+      "routing_key": "parse.start",
+      "arguments": {}
+    },
+    {
+      "source": "medprice.events",
+      "vhost": "/",
+      "destination": "q.price.found",
+      "destination_type": "queue",
+      "routing_key": "price.found",
+      "arguments": {}
+    },
+    {
+      "source": "medprice.events",
+      "vhost": "/",
+      "destination": "q.parse.done",
+      "destination_type": "queue",
+      "routing_key": "parse.done",
+      "arguments": {}
+    },
+    {
+      "source": "medprice.events",
+      "vhost": "/",
+      "destination": "q.parse.error",
+      "destination_type": "queue",
+      "routing_key": "parse.error",
+      "arguments": {}
+    },
+    {
+      "source": "medprice.events",
+      "vhost": "/",
+      "destination": "q.enrich.request",
+      "destination_type": "queue",
+      "routing_key": "enrich.request",
+      "arguments": {}
+    },
+    {
+      "source": "medprice.events",
+      "vhost": "/",
+      "destination": "q.notify",
+      "destination_type": "queue",
+      "routing_key": "price.changed",
+      "arguments": {}
+    },
+    {
+      "source": "medprice.dlx",
+      "vhost": "/",
+      "destination": "q.dead_letter",
+      "destination_type": "queue",
+      "routing_key": "dlq.#",
+      "arguments": {}
+    }
+  ]
+}
