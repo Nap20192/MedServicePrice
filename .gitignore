@@ -1,1 +1,11 @@
 deploy/.env
+
+# vendored crawl4ai source (cloned, not committed) — installed via requirements.txt
+crawl4ai/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env

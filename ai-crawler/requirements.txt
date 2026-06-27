@@ -1,0 +1,22 @@
+# Python parser service dependencies (pinned to the working venv).
+# Python 3.13 — crawl4ai pins lxml~=5.3, which has no wheel for 3.14.
+
+# Crawler: deep crawl (BestFirst + filters), markdown, JsonCss/LLM extractors.
+# Pulls in Playwright, lxml, beautifulsoup4, aiohttp, pydantic, litellm.
+crawl4ai==0.9.0
+
+# Headless browser used by crawl4ai's browser-fallback path.
+# After install, fetch the browser once: `python -m playwright install chromium`.
+playwright==1.60.0
+
+# RabbitMQ — async client, matches crawl4ai's asyncio runtime.
+aio-pika==9.6.2
+
+# PostgreSQL — async driver for writing raw_pages directly.
+asyncpg==0.31.0
+
+# Scheduling (daily parse tick).
+apscheduler==3.11.2
+
+# YAML config loader for config.yaml.
+PyYAML==6.0.3

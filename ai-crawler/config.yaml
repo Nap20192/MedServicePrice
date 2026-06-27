@@ -1,0 +1,116 @@
+# Non-secret crawler settings. Real environment variables and .env override this file.
+
+crawl:
+  max_depth: 5
+  max_pages: 1000
+  concurrency: 20
+  fetch_concurrency: 20
+  page_timeout_ms: 30000
+  crawl_mode: http
+  escalate: true
+  discovery_mode: agent
+  agent_batch_size: 8
+  agent_links_per_page: 40
+  rediscover: false
+  discovery_city_slugs:
+    - astana
+    - aktau
+    - aktobe
+    - saran
+  discovery_seed_templates:
+    - /analizes/for-doctors/{city}
+    - /analizes/profi/{city}
+    - /{city}/radiology
+
+browser:
+  # Debug-only. When true, Playwright opens a visible browser window.
+  visible: false
+  headless: true
+  verbose: false
+  disable_gpu: true
+  extra_args: []
+
+mcp:
+  # Optional adapter fallback for SPA / anti-bot shells. Requires Node.js.
+  enabled: false
+  command:
+    - npx
+    - -y
+    - "@playwright/mcp@latest"
+  browser: chrome
+  visible: false
+  headless: true
+  output_dir: .mcp-output
+  output_mode: file
+  snapshot_mode: full
+  console_level: warning
+  # network is required so adapter can inspect XHR/API calls and turn them into fetch strategy.
+  caps:
+    - network
+  timeout_s: 45
+  timeout_action_ms: 10000
+  timeout_navigation_ms: 60000
+  viewport_size: 1366x900
+  allowed_origins: ""
+  allowed_hosts: localhost,127.0.0.1
+  blocked_origins: ""
+  block_service_workers: true
+  isolated: true
+  save_session: true
+  shared_browser_context: false
+  image_responses: omit
+  codegen: none
+  ignore_https_errors: true
+  no_sandbox: false
+  user_data_dir: .mcp-user-data
+  storage_state: ""
+  user_agent: ""
+  proxy_server: ""
+  proxy_bypass: ""
+  init_script: []
+  init_page: []
+  # leave empty: do not feed the project .env (LLM keys) to the MCP browser.
+  secrets_file: ""
+
+output:
+  output_dir: .
+  pages_dir: pages
+  schema_dir: schemas
+  state_dir: state
+  adapter_dir: adapters
+  save_pages: false
+  write_discovery_output: false
+
+adapter:
+  compact: true
+  listing_row_threshold: 25
+
+extraction:
+  fields:
+    - service_name_raw
+    - price_kzt
+    - duration_days
+    - url
+  default_currency: KZT
+  min_price: 50
+  dead_route_threshold: 5
+  # slow LLM CSS-schema induction runs only when deterministic tiers find nothing;
+  # cap calls per domain per run (0 disables LLM induction entirely)
+  schema_gen_max_per_domain: 2
+
+llm:
+  model: deepseek-v4-flash
+  provider: openai/deepseek-v4-flash
+  base_url: https://api.deepseek.com
+  # OFF by default: deterministic extractors (html/links/blocks/regex) already cover
+  # the tested sites and are ~10x faster. Turn on only for sites they cannot parse.
+  schema_gen: false
+  concurrency: 5
+
+logging:
+  log_level: INFO
+  log_color: auto
+  log_prompts: true
+  # full prompt body dumps the whole HTML line-by-line; keep off
+  log_prompts_full: false
+  prompt_log_max_chars: 6000

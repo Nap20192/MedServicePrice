@@ -1,0 +1,15 @@
+
+# secrets
+.env
+prices.jsonl
+*-prices.jsonl
+pages/
+crawler.log
+schemas/
+state/
+adapters/
+.crawl4ai/
+.mcp-output/
+.mcp-user-data/
+__pycache__/
+*.pyc
