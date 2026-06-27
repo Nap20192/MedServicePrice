@@ -17,6 +17,19 @@ ENV PORT=80
 
 RUN rm /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
-COPY frontend/nginx.conf.template /etc/nginx/templates/default.conf.template
+RUN mkdir -p /etc/nginx/templates \
+    && printf '%s\n' \
+    'server {' \
+    '    listen ${PORT};' \
+    '    server_name _;' \
+    '' \
+    '    root /usr/share/nginx/html;' \
+    '    index index.html;' \
+    '' \
+    '    location / {' \
+    '        try_files $uri $uri/ /index.html;' \
+    '    }' \
+    '}' \
+    > /etc/nginx/templates/default.conf.template
 
 EXPOSE 80
