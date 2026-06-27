@@ -22,7 +22,7 @@ func NewConsumer(usecase domain.ConsumerUseCase) *Consumer {
 func (c *Consumer) Handler(ctx context.Context, messages <-chan amqp.Delivery) {
 	for msg := range messages {
 		// Process message
-		err := c.usecase.ProcessFoundPrice(ctx, msg.Body)
+		err := c.usecase.ProcessAdapterFetch(ctx, msg.Body)
 		if err != nil {
 			fmt.Printf("Error processing message: %v\n", err)
 			// Nack and requeue or dead letter (using false, false for now which just discards if no redelivery is needed, 

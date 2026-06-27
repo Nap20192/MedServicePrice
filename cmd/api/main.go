@@ -76,15 +76,15 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create publisher: %v", err)
 	}
-	parseStartPublisher := pub.Configure(
+	adapterPublisher := pub.Configure(
 		publisher.ExchangeName("medprice.events"),
-		publisher.BindingKey("parse.start"),
+		publisher.BindingKey("adapter.create"),
 		publisher.MessageTypeName("event"),
 		publisher.WithLogger(appLogger),
 	)
 
 	// 4. Initialize UseCases
-	sourceUC := usecase.NewSourceUseCase(sourceRepo, clinicRepo, parseStartPublisher)
+	sourceUC := usecase.NewSourceUseCase(sourceRepo, clinicRepo, adapterPublisher)
 	priceUC := usecase.NewPriceUseCase(priceRepo)
 	consumerUC := usecase.NewConsumerUseCase(priceRepo, clinicRepo, sourceRepo)
 
@@ -107,20 +107,20 @@ func main() {
 		}
 	}()
 
-	// 6. Setup RabbitMQ Consumer
+	// 6. Setup RabbitMQ Consumer (demonstrating adapter.fetch)
 	priceConsumerHandler := delivrmq.NewConsumer(consumerUC)
-	priceFoundConsumer := consumer.NewConsumer(conn).Configure(
-		consumer.QueueName("q.price.found"),
-		consumer.ConsumerTag("go-price-consumer"),
+	adapterFetchConsumer := consumer.NewConsumer(conn).Configure(
+		consumer.QueueName("q.adapter.fetch"),
+		consumer.ConsumerTag("go-adapter-fetch-consumer"),
 		consumer.WorkerPoolSize(10),
 		consumer.WithLogger(appLogger),
 	)
 
 	go func() {
-		appLogger.Info("Starting RabbitMQ consumer")
-		err := priceFoundConsumer.StartConsumer(priceConsumerHandler.Handler)
+		appLogger.Info("Starting RabbitMQ consumer on q.adapter.fetch")
+		err := adapterFetchConsumer.StartConsumer(priceConsumerHandler.Handler)
 		if err != nil {
-			appLogger.Error("priceFoundConsumer stopped", "err", err)
+			appLogger.Error("adapterFetchConsumer stopped", "err", err)
 		}
 	}()
 

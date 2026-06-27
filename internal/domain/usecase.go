@@ -13,5 +13,5 @@ type PriceUseCase interface {
 }
 
 type ConsumerUseCase interface {
-	ProcessFoundPrice(ctx context.Context, payload []byte) error
+	ProcessAdapterFetch(ctx context.Context, payload []byte) error
 }

@@ -25,64 +25,23 @@
   ],
   "queues": [
     {
-      "name": "q.parse.start",
+      "name": "q.adapter.create",
       "vhost": "/",
       "durable": true,
       "auto_delete": false,
       "arguments": {
         "x-dead-letter-exchange": "medprice.dlx",
-        "x-dead-letter-routing-key": "dlq.parse.start"
+        "x-dead-letter-routing-key": "dlq.adapter.create"
       }
     },
     {
-      "name": "q.price.found",
+      "name": "q.adapter.fetch",
       "vhost": "/",
       "durable": true,
       "auto_delete": false,
       "arguments": {
         "x-dead-letter-exchange": "medprice.dlx",
-        "x-dead-letter-routing-key": "dlq.price.found",
-        "x-queue-type": "quorum"
-      }
-    },
-    {
-      "name": "q.parse.done",
-      "vhost": "/",
-      "durable": true,
-      "auto_delete": false,
-      "arguments": {
-        "x-dead-letter-exchange": "medprice.dlx",
-        "x-dead-letter-routing-key": "dlq.parse.done"
-      }
-    },
-    {
-      "name": "q.parse.error",
-      "vhost": "/",
-      "durable": true,
-      "auto_delete": false,
-      "arguments": {
-        "x-dead-letter-exchange": "medprice.dlx",
-        "x-dead-letter-routing-key": "dlq.parse.error"
-      }
-    },
-    {
-      "name": "q.enrich.request",
-      "vhost": "/",
-      "durable": true,
-      "auto_delete": false,
-      "arguments": {
-        "x-dead-letter-exchange": "medprice.dlx",
-        "x-dead-letter-routing-key": "dlq.enrich.request"
-      }
-    },
-    {
-      "name": "q.notify",
-      "vhost": "/",
-      "durable": true,
-      "auto_delete": false,
-      "arguments": {
-        "x-dead-letter-exchange": "medprice.dlx",
-        "x-dead-letter-routing-key": "dlq.notify"
+        "x-dead-letter-routing-key": "dlq.adapter.fetch"
       }
     },
     {
@@ -97,49 +56,17 @@
     {
       "source": "medprice.events",
       "vhost": "/",
-      "destination": "q.parse.start",
+      "destination": "q.adapter.create",
       "destination_type": "queue",
-      "routing_key": "parse.start",
+      "routing_key": "adapter.create",
       "arguments": {}
     },
     {
       "source": "medprice.events",
       "vhost": "/",
-      "destination": "q.price.found",
+      "destination": "q.adapter.fetch",
       "destination_type": "queue",
-      "routing_key": "price.found",
-      "arguments": {}
-    },
-    {
-      "source": "medprice.events",
-      "vhost": "/",
-      "destination": "q.parse.done",
-      "destination_type": "queue",
-      "routing_key": "parse.done",
-      "arguments": {}
-    },
-    {
-      "source": "medprice.events",
-      "vhost": "/",
-      "destination": "q.parse.error",
-      "destination_type": "queue",
-      "routing_key": "parse.error",
-      "arguments": {}
-    },
-    {
-      "source": "medprice.events",
-      "vhost": "/",
-      "destination": "q.enrich.request",
-      "destination_type": "queue",
-      "routing_key": "enrich.request",
-      "arguments": {}
-    },
-    {
-      "source": "medprice.events",
-      "vhost": "/",
-      "destination": "q.notify",
-      "destination_type": "queue",
-      "routing_key": "price.changed",
+      "routing_key": "adapter.fetch",
       "arguments": {}
     },
     {

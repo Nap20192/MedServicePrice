@@ -59,27 +59,22 @@ func (uc *sourceUC) AddSource(ctx context.Context, url string, clinicName string
 		return nil, fmt.Errorf("failed to create source: %w", err)
 	}
 
-	// Publish parse.start event
+	// Publish adapter.create event
 	event := map[string]interface{}{
 		"schema_version": 1,
 		"msg_id":         uuid.New().String(),
-		"parse_run_id":   uuid.New().String(),
-		"source": map[string]interface{}{
-			"id":             newSource.ID.String(),
-			"base_url":       url,
-			"parser_kind":    "html",
-			"request_delay_ms": 2000,
-			"respect_robots": true,
-			"config": map[string]interface{}{
-				"start_urls": []string{url},
-			},
+		"adapter_id":     newSource.ID.String(),
+		"name":           clinicName,
+		"base_url":       url,
+		"config": map[string]interface{}{
+			"rate_limit_ms": 2000,
+			"max_depth":     3,
 		},
-		"trigger": "api_added",
 	}
 
 	if err := uc.publisher.PublishEvents(ctx, []any{event}); err != nil {
 		// Log error but don't fail the request
-		fmt.Printf("failed to publish parse.start event: %v\n", err)
+		fmt.Printf("failed to publish adapter.create event: %v\n", err)
 	}
 
 	return newSource, nil
