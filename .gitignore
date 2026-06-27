@@ -9,3 +9,8 @@ __pycache__/
 .venv/
 venv/
 .env
+
+ТЗ_Кейс1_MedPrice.txt
+ТЗ_Кейс1_MedPrice.docx
+
+*.exe

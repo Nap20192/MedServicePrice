@@ -1,0 +1,312 @@
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import SearchBar from '../components/SearchBar';
+import ServiceCard from '../components/ServiceCard';
+import { SkeletonList } from '../components/SkeletonCard';
+import { useMedicalServices } from '../hooks/useMedicalServices';
+import { SearchFilters, SortMode, ServiceCategory } from '../types';
+
+const MapView = lazy(() => import('../components/MapView'));
+
+const PRICE_MAX = 200000;
+
+type ViewMode = 'list' | 'map';
+
+export default function SearchPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Читаем параметры из URL
+  const urlQuery = searchParams.get('query') || '';
+  const urlCity = searchParams.get('city') || 'Все города';
+  const urlCategory = (searchParams.get('category') || '') as ServiceCategory | '';
+
+  const [query, setQuery] = useState(urlQuery);
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [sort, setSort] = useState<SortMode>('price_asc');
+
+  const [filters, setFilters] = useState<SearchFilters>({
+    city: urlCity,
+    category: urlCategory,
+    priceMin: 0,
+    priceMax: PRICE_MAX,
+    durationDays: null,
+    workingNow: false,
+    onlineBooking: false,
+  });
+
+  // Sync URL → state when URL changes
+  useEffect(() => {
+    setQuery(searchParams.get('query') || '');
+    setFilters((prev) => ({
+      ...prev,
+      city: searchParams.get('city') || 'Все города',
+      category: (searchParams.get('category') || '') as ServiceCategory | '',
+    }));
+  }, [searchParams]);
+
+  const { data, loading } = useMedicalServices(query, filters, sort);
+
+  const handleSearch = useCallback((q: string, city: string) => {
+    const params = new URLSearchParams();
+    if (q) params.set('query', q);
+    if (city && city !== 'Все города') params.set('city', city);
+    setSearchParams(params);
+    setQuery(q);
+    setFilters((prev) => ({ ...prev, city }));
+  }, [setSearchParams]);
+
+  const updateFilter = <K extends keyof SearchFilters>(key: K, value: SearchFilters[K]) => {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const minPrice = data.length > 0 ? Math.min(...data.map((s) => s.price_kzt)) : 0;
+  const maxPrice = data.length > 0 ? Math.max(...data.map((s) => s.price_kzt)) : 0;
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      {/* Top search bar */}
+      <div className="bg-white border-b border-slate-100 sticky top-16 z-30 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 py-3">
+          <SearchBar
+            initialQuery={query}
+            initialCity={filters.city}
+            onSearch={handleSearch}
+            compact
+          />
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        <div className="flex gap-6">
+          {/* ── Left sidebar: Filters ── */}
+          <aside className="w-64 shrink-0 hidden lg:block">
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 sticky top-32 space-y-6">
+              <h3 className="font-semibold text-slate-800 text-sm">Фильтры</h3>
+
+              {/* Price range */}
+              <div>
+                <label className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2 block">
+                  Цена (₸)
+                </label>
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      value={filters.priceMin}
+                      onChange={(e) => updateFilter('priceMin', Number(e.target.value))}
+                      placeholder="от"
+                      className="w-1/2 border border-slate-200 rounded-lg px-2 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                      id="filter-price-min"
+                    />
+                    <input
+                      type="number"
+                      value={filters.priceMax === PRICE_MAX ? '' : filters.priceMax}
+                      onChange={(e) => updateFilter('priceMax', e.target.value ? Number(e.target.value) : PRICE_MAX)}
+                      placeholder="до"
+                      className="w-1/2 border border-slate-200 rounded-lg px-2 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                      id="filter-price-max"
+                    />
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={PRICE_MAX}
+                    step={500}
+                    value={filters.priceMax === PRICE_MAX ? PRICE_MAX : filters.priceMax}
+                    onChange={(e) => updateFilter('priceMax', Number(e.target.value))}
+                    className="w-full accent-teal-500"
+                    id="filter-price-slider"
+                  />
+                </div>
+              </div>
+
+              {/* Category */}
+              <div>
+                <label className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2 block">
+                  Категория
+                </label>
+                <div className="space-y-1">
+                  {[
+                    { value: '', label: 'Все категории' },
+                    { value: 'лаборатория', label: '🧪 Лаборатория' },
+                    { value: 'диагностика', label: '🔬 Диагностика' },
+                    { value: 'приём врача', label: '👨‍⚕️ Приём врача' },
+                    { value: 'процедура', label: '💉 Процедура' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => updateFilter('category', opt.value as ServiceCategory | '')}
+                      className={`w-full text-left text-sm px-3 py-2 rounded-lg transition-colors ${filters.category === opt.value ? 'bg-teal-50 text-teal-700 font-medium' : 'text-slate-600 hover:bg-slate-50'}`}
+                      id={`filter-cat-${opt.value || 'all'}`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Duration */}
+              <div>
+                <label className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2 block">
+                  Срок готовности
+                </label>
+                <div className="space-y-1">
+                  {[
+                    { value: null, label: 'Любой' },
+                    { value: 1, label: 'За 1 день' },
+                    { value: 3, label: 'До 3 дней' },
+                  ].map((opt) => (
+                    <button
+                      key={String(opt.value)}
+                      onClick={() => updateFilter('durationDays', opt.value)}
+                      className={`w-full text-left text-sm px-3 py-2 rounded-lg transition-colors ${filters.durationDays === opt.value ? 'bg-teal-50 text-teal-700 font-medium' : 'text-slate-600 hover:bg-slate-50'}`}
+                      id={`filter-dur-${opt.value ?? 'any'}`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Toggles */}
+              <div className="space-y-3">
+                {[
+                  { key: 'workingNow', label: 'Работает сейчас' },
+                  { key: 'onlineBooking', label: 'Онлайн-запись' },
+                ].map(({ key, label }) => (
+                  <label key={key} className="flex items-center justify-between cursor-pointer group">
+                    <span className="text-sm text-slate-600 group-hover:text-slate-800 transition-colors">{label}</span>
+                    <div
+                      onClick={() => updateFilter(key as keyof SearchFilters, !filters[key as keyof SearchFilters] as SearchFilters[keyof SearchFilters])}
+                      className={`relative w-10 h-5 rounded-full transition-colors cursor-pointer ${filters[key as keyof SearchFilters] ? 'bg-teal-500' : 'bg-slate-200'}`}
+                      id={`filter-toggle-${key}`}
+                    >
+                      <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${filters[key as keyof SearchFilters] ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                    </div>
+                  </label>
+                ))}
+              </div>
+
+              {/* Reset */}
+              <button
+                onClick={() => setFilters({ city: filters.city, category: '', priceMin: 0, priceMax: PRICE_MAX, durationDays: null, workingNow: false, onlineBooking: false })}
+                className="w-full text-xs text-slate-400 hover:text-red-500 transition-colors py-1"
+                id="filter-reset-btn"
+              >
+                Сбросить фильтры
+              </button>
+            </div>
+          </aside>
+
+          {/* ── Main content ── */}
+          <div className="flex-1 min-w-0">
+            {/* Toolbar */}
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+              <div>
+                <p className="text-sm text-slate-500">
+                  {loading ? 'Поиск...' : (
+                    <>
+                      Найдено <span className="font-semibold text-slate-800">{data.length}</span> предложений
+                      {query && <> по запросу «<span className="font-medium text-teal-600">{query}</span>»</>}
+                    </>
+                  )}
+                </p>
+                {!loading && data.length > 0 && (
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Цены: от {new Intl.NumberFormat('ru-KZ').format(minPrice)} ₸ до {new Intl.NumberFormat('ru-KZ').format(maxPrice)} ₸
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3">
+                {/* Sort tabs */}
+                <div className="flex bg-white border border-slate-200 rounded-xl p-1 gap-1">
+                  {([
+                    { value: 'price_asc', label: 'Дешевле' },
+                    { value: 'price_desc', label: 'Дороже' },
+                    { value: 'date_desc', label: 'Свежее' },
+                  ] as { value: SortMode; label: string }[]).map((s) => (
+                    <button
+                      key={s.value}
+                      onClick={() => setSort(s.value)}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${sort === s.value ? 'bg-teal-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                      id={`sort-btn-${s.value}`}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* View toggle */}
+                <div className="flex bg-white border border-slate-200 rounded-xl p-1 gap-1">
+                  <button
+                    onClick={() => setViewMode('list')}
+                    className={`p-1.5 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-teal-500 text-white' : 'text-slate-400 hover:text-slate-600'}`}
+                    id="view-list-btn"
+                    title="Список"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => setViewMode('map')}
+                    className={`p-1.5 rounded-lg transition-colors ${viewMode === 'map' ? 'bg-teal-500 text-white' : 'text-slate-400 hover:text-slate-600'}`}
+                    id="view-map-btn"
+                    title="Карта"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Content area */}
+            {viewMode === 'list' ? (
+              <div>
+                {loading ? (
+                  <SkeletonList count={5} />
+                ) : data.length === 0 ? (
+                  <div className="text-center py-20">
+                    <div className="text-6xl mb-4">🔍</div>
+                    <h3 className="text-xl font-semibold text-slate-700 mb-2">Ничего не найдено</h3>
+                    <p className="text-slate-400">Попробуйте изменить запрос или сбросить фильтры</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {data.map((service) => (
+                      <ServiceCard key={service.service_id} service={service} showCity={filters.city === 'Все города'} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex gap-4 h-[calc(100vh-220px)]">
+                {/* Narrow cards on left */}
+                <div className="w-80 shrink-0 overflow-y-auto space-y-3 pr-1">
+                  {loading ? (
+                    <SkeletonList count={3} />
+                  ) : data.map((service) => (
+                    <ServiceCard key={service.service_id} service={service} showCity />
+                  ))}
+                </div>
+                {/* Map on right */}
+                <div className="flex-1 min-h-[400px]">
+                  <Suspense fallback={
+                    <div className="w-full h-full bg-slate-100 rounded-xl flex items-center justify-center">
+                      <div className="text-slate-400 text-sm">Загрузка карты...</div>
+                    </div>
+                  }>
+                    {!loading && <MapView services={data} />}
+                  </Suspense>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

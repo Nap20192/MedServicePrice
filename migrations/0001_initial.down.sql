@@ -1,0 +1,7 @@
+DROP TABLE IF EXISTS parsed_services CASCADE;
+DROP TABLE IF EXISTS services_catalog CASCADE;
+DROP TABLE IF EXISTS sources CASCADE;
+DROP TABLE IF EXISTS clinics CASCADE;
+
+DROP TYPE IF EXISTS currency_enum;
+DROP TYPE IF EXISTS service_category;
