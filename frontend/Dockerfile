@@ -19,9 +19,9 @@ ENV PORT=3000
 ENV NODE_ENV=production
 
 COPY --from=build /app/package.json /app/package-lock.json ./
-COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+COPY frontend/server.mjs ./server.mjs
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "npm run preview -- --host 0.0.0.0 --port ${PORT:-3000}"]
+CMD ["node", "server.mjs"]

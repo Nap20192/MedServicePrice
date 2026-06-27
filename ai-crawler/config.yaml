@@ -1,26 +1,39 @@
 # Non-secret crawler settings. Real environment variables and .env override this file.
 
 crawl:
-  max_depth: 5
-  max_pages: 1000
-  concurrency: 20
-  fetch_concurrency: 20
-  page_timeout_ms: 30000
+  max_depth: 7
+  max_pages: 3000
+  concurrency: 24
+  fetch_concurrency: 24
+  page_timeout_ms: 60000
   crawl_mode: http
   escalate: true
   discovery_mode: agent
-  agent_batch_size: 8
-  agent_links_per_page: 40
-  rediscover: false
+  agent_batch_size: 12
+  agent_links_per_page: 90
+  rediscover: true
   discovery_city_slugs:
     - astana
+    - almaty
     - aktau
     - aktobe
+    - atyrau
+    - karaganda
+    - kostanay
+    - pavlodar
     - saran
+    - semey
+    - shymkent
+    - taraz
+    - uralsk
+    - oskemen
   discovery_seed_templates:
     - /analizes/for-doctors/{city}
     - /analizes/profi/{city}
     - /{city}/radiology
+    - /{city}/analizes
+    - /{city}/services
+    - /pricelist/{city}
 
 browser:
   # Debug-only. When true, Playwright opens a visible browser window.
@@ -82,8 +95,8 @@ output:
   write_discovery_output: false
 
 adapter:
-  compact: true
-  listing_row_threshold: 25
+  compact: false
+  listing_row_threshold: 8
 
 extraction:
   fields:
@@ -96,15 +109,15 @@ extraction:
   dead_route_threshold: 5
   # slow LLM CSS-schema induction runs only when deterministic tiers find nothing;
   # cap calls per domain per run (0 disables LLM induction entirely)
-  schema_gen_max_per_domain: 2
+  schema_gen_max_per_domain: 8
 
 llm:
   model: deepseek-v4-flash
   provider: openai/deepseek-v4-flash
   base_url: https://api.deepseek.com
-  # OFF by default: deterministic extractors (html/links/blocks/regex) already cover
-  # the tested sites and are ~10x faster. Turn on only for sites they cannot parse.
-  schema_gen: false
+  # Enabled for stronger adapter discovery: deterministic extractors still run first;
+  # LLM schema induction is only used when a page has prices but no deterministic rows.
+  schema_gen: true
   concurrency: 5
 
 logging:

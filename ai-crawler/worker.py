@@ -86,8 +86,16 @@ async def _ensure_topology(channel: aio_pika.abc.AbstractChannel):
 
 
 # -- per-run knob mapping ------------------------------------------------------
+def _truthy(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() not in ("", "0", "false", "no", "off")
+
+
 def _apply_run_knobs(config: dict) -> None:
-    """Map message config.{max_depth,rate_limit_ms} onto pipeline knobs for this run.
+    """Map message config knobs onto pipeline globals for this run.
 
     MAX_DEPTH is imported by value into the discovery/fetch modules, so we patch
     those module globals too. This mutates process-global state, which is safe only
@@ -103,6 +111,55 @@ def _apply_run_knobs(config: dict) -> None:
         md = int(max_depth)
         cfg.MAX_DEPTH = harvest.MAX_DEPTH = fetcher.MAX_DEPTH = md
         log.info("run knob MAX_DEPTH=%d", md)
+    max_pages = config.get("max_pages")
+    if max_pages:
+        import crawler.discovery.harvest as harvest
+        import crawler.fetch.fetcher as fetcher
+        mp = int(max_pages)
+        cfg.MAX_PAGES = harvest.MAX_PAGES = fetcher.MAX_PAGES = mp
+        log.info("run knob MAX_PAGES=%d", mp)
+    agent_batch_size = config.get("agent_batch_size")
+    if agent_batch_size:
+        import crawler.discovery.harvest as harvest
+        abs_ = int(agent_batch_size)
+        cfg.AGENT_BATCH_SIZE = harvest.AGENT_BATCH_SIZE = abs_
+        log.info("run knob AGENT_BATCH_SIZE=%d", abs_)
+    agent_links_per_page = config.get("agent_links_per_page")
+    if agent_links_per_page:
+        import crawler.discovery.harvest as harvest
+        alpp = int(agent_links_per_page)
+        cfg.AGENT_LINKS_PER_PAGE = harvest.AGENT_LINKS_PER_PAGE = alpp
+        log.info("run knob AGENT_LINKS_PER_PAGE=%d", alpp)
+    fetch_concurrency = config.get("fetch_concurrency")
+    if fetch_concurrency:
+        import crawler.fetch.fetcher as fetcher
+        fc = int(fetch_concurrency)
+        cfg.FETCH_CONCURRENCY = fetcher.FETCH_CONCURRENCY = fc
+        log.info("run knob FETCH_CONCURRENCY=%d", fc)
+    page_timeout_ms = config.get("page_timeout_ms")
+    if page_timeout_ms:
+        import crawler.fetch.fetcher as fetcher
+        pt = int(page_timeout_ms)
+        cfg.PAGE_TIMEOUT_MS = fetcher.PAGE_TIMEOUT_MS = pt
+        log.info("run knob PAGE_TIMEOUT_MS=%d", pt)
+    if "adapter_compact" in config:
+        import crawler.adapter.adapter as adapter_mod
+        value = _truthy(config.get("adapter_compact"))
+        cfg.ADAPTER_COMPACT = adapter_mod.ADAPTER_COMPACT = value
+        log.info("run knob ADAPTER_COMPACT=%s", value)
+    if "schema_gen_max_per_domain" in config:
+        import crawler.extract.extract as extract_mod
+        budget = max(0, int(config.get("schema_gen_max_per_domain") or 0))
+        cfg.SCHEMA_GEN_MAX_PER_DOMAIN = extract_mod.SCHEMA_GEN_MAX_PER_DOMAIN = budget
+        log.info("run knob SCHEMA_GEN_MAX_PER_DOMAIN=%d", budget)
+    if "llm_schema_gen" in config:
+        import crawler.extract.extract as extract_mod
+        enabled = _truthy(config.get("llm_schema_gen")) and bool(cfg.LLM_API_KEY)
+        cfg.LLM_SCHEMA_GEN = extract_mod.LLM_SCHEMA_GEN = enabled
+        log.info("run knob LLM_SCHEMA_GEN=%s", enabled)
+    if "rediscover" in config:
+        cfg.REDISCOVER = _truthy(config.get("rediscover"))
+        log.info("run knob REDISCOVER=%s", cfg.REDISCOVER)
     rate = config.get("rate_limit_ms")
     if rate is not None:
         os.environ["RATE_LIMIT_MS"] = str(rate)  # stored; pacing TODO
@@ -177,10 +234,12 @@ async def _resolve_source(con, adapter_id: str, url: str) -> str | None:
     return str(row["source_id"]) if row else None
 
 
-async def _ensure_adapter_ready(base_url: str) -> None:
+async def _ensure_adapter_ready(base_url: str, *, force_rediscover: bool = False) -> None:
     domain = host(base_url)
     adapter = SiteAdapter.load(domain)
-    if adapter is None or not adapter.data_urls:
+    if force_rediscover or cfg.REDISCOVER or adapter is None or not adapter.data_urls:
+        if force_rediscover or cfg.REDISCOVER:
+            log.info("rediscovering adapter domain=%s base_url=%s", domain, base_url)
         adapter = await create_or_update_adapter(base_url)
     if adapter is None or not adapter.data_urls:
         raise RuntimeError(
@@ -199,7 +258,7 @@ class Worker:
         config = data.get("config") or {}
         _apply_run_knobs(config)
         log.info("adapter.create adapter_id=%s base_url=%s", adapter_id, base_url)
-        await _ensure_adapter_ready(base_url)
+        await _ensure_adapter_ready(base_url, force_rediscover=_truthy(config.get("rediscover")))
         async with self.pool.acquire() as con:
             await _register_source(
                 con,
@@ -223,7 +282,7 @@ class Worker:
                 _apply_run_knobs(config)
                 log.warning("adapter missing for adapter_id=%s url=%s — creating first",
                             adapter_id, url)
-                await _ensure_adapter_ready(base_url)
+                await _ensure_adapter_ready(base_url, force_rediscover=_truthy(config.get("rediscover")))
                 async with self.pool.acquire() as con:
                     source_id = await _register_source(
                         con,
@@ -234,7 +293,12 @@ class Worker:
                         data.get("source_id"),
                     )
             else:
-                await _ensure_adapter_ready(data.get("base_url") or url)
+                config = data.get("config") or {}
+                _apply_run_knobs(config)
+                await _ensure_adapter_ready(
+                    data.get("base_url") or url,
+                    force_rediscover=_truthy(config.get("rediscover")),
+                )
         sink = build_sink(SINK, pool=self.pool, source_id=source_id)
         log.info("adapter.fetch adapter_id=%s url=%s sink=%s", adapter_id, url, SINK)
         rows_written = await fetch(url, sink)

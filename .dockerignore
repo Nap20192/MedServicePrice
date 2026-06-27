@@ -6,10 +6,13 @@ frontend/node_modules
 frontend/dist
 
 ai-crawler/.venv
+ai-crawler/.crawl4ai
 ai-crawler/state
 ai-crawler/adapters
 ai-crawler/pages
 ai-crawler/output
+ai-crawler/crawler.log
+**/*.log
 
 **/.DS_Store
 **/__pycache__
