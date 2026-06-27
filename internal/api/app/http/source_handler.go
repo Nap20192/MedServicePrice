@@ -15,13 +15,21 @@ type sourceHandler struct {
 }
 
 type addSourceRequest struct {
-	URL          string `json:"url"`
-	ClinicName   string `json:"clinic_name"`
-	City         string `json:"city"`
-	Address      string `json:"address"`
-	Phone        string `json:"phone"`
-	WorkingHours string `json:"working_hours"`
-	FetchNow     bool   `json:"fetch_now"`
+	URL      string `json:"url"`
+	FetchNow bool   `json:"fetch_now"`
+}
+
+type createClinicRequest struct {
+	Name         string      `json:"name"`
+	City         string      `json:"city"`
+	Address      string      `json:"address"`
+	Phone        string      `json:"phone"`
+	WorkingHours string      `json:"working_hours"`
+	SourceIDs    []uuid.UUID `json:"source_ids"`
+}
+
+type updateSchedulerRequest struct {
+	FetchIntervalHours int `json:"fetch_interval_hours"`
 }
 
 type addSourceResponse struct {
@@ -45,13 +53,8 @@ func (h *sourceHandler) AddSource(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := h.usecase.AddSource(r.Context(), domain.CreateSourceInput{
-		URL:          req.URL,
-		ClinicName:   req.ClinicName,
-		City:         req.City,
-		Address:      req.Address,
-		Phone:        req.Phone,
-		WorkingHours: req.WorkingHours,
-		FetchNow:     req.FetchNow,
+		URL:      req.URL,
+		FetchNow: req.FetchNow,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -81,6 +84,38 @@ func (h *sourceHandler) ListSources(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(sources)
 }
 
+func (h *sourceHandler) CreateClinic(w http.ResponseWriter, r *http.Request) {
+	var req createClinicRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	clinic, err := h.usecase.CreateClinic(r.Context(), domain.CreateClinicInput{
+		Name:         req.Name,
+		City:         req.City,
+		Address:      req.Address,
+		Phone:        req.Phone,
+		WorkingHours: req.WorkingHours,
+		SourceIDs:    req.SourceIDs,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(clinic)
+}
+
+func (h *sourceHandler) ListClinics(w http.ResponseWriter, r *http.Request) {
+	clinics, err := h.usecase.ListClinics(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(clinics)
+}
+
 func (h *sourceHandler) TriggerFetch(w http.ResponseWriter, r *http.Request) {
 	sourceID, err := uuid.Parse(chi.URLParam(r, "sourceID"))
 	if err != nil {
@@ -104,6 +139,35 @@ func (h *sourceHandler) TriggerFetch(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
+}
+
+type schedulerHandler struct {
+	usecase domain.SchedulerUseCase
+}
+
+func (h *schedulerHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
+	settings, err := h.usecase.GetSettings(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(settings)
+}
+
+func (h *schedulerHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
+	var req updateSchedulerRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	settings, err := h.usecase.UpdateFetchInterval(r.Context(), req.FetchIntervalHours)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(settings)
 }
 
 func statusForResult(result *domain.SourceCommandResult) string {

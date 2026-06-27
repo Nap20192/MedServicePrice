@@ -25,7 +25,14 @@ def short(url: str) -> str:
 
 
 def new_stats() -> dict:
-    return {"pages": 0, "with_prices": 0, "tiers": {}, "invalid": 0}
+    return {
+        "pages": 0,
+        "with_prices": 0,
+        "tiers": {},
+        "invalid": 0,
+        "rows": 0,
+        "last_progress_pages": 0,
+    }
 
 
 def process(page: Page, rows: list, stats: dict, store: RouteStore) -> tuple[bool, int]:
@@ -93,8 +100,9 @@ def apply_result(result: dict, rows: list, stats: dict, store: RouteStore) -> tu
     store.record(tmpl, valid)
     if not valid:
         stats["invalid"] += 1
-        log.warning("invalid page url=%s template=%s reason=%s status=%s",
-                    page.url, tmpl, result["reason"], page.status)
+        log.debug("invalid page url=%s template=%s reason=%s status=%s",
+                  page.url, tmpl, result["reason"], page.status)
+        _progress(stats)
         return False, 0
 
     tier = result["tier"]
@@ -105,14 +113,16 @@ def apply_result(result: dict, rows: list, stats: dict, store: RouteStore) -> tu
     if page_rows:
         stats["with_prices"] += 1
         stats["tiers"][tier] = stats["tiers"].get(tier, 0) + 1
+        stats["rows"] += len(page_rows)
         rows.extend(page_rows)
         save_page(page.url, page_rows)
         sample = page_rows[0]
-        log.info("page url=%s category=%s tier=%s rows=%d sample=%r",
-                 short(page.url), page_category, tier, len(page_rows),
-                 f"{sample['service'][:50]} | {sample['price']:g} {sample['currency']}")
+        log.debug("page url=%s category=%s tier=%s rows=%d sample=%r",
+                  short(page.url), page_category, tier, len(page_rows),
+                  f"{sample['service'][:50]} | {sample['price']:g} {sample['currency']}")
     else:
         log.debug("page url=%s category=%s tier=%s rows=0", short(page.url), page_category, tier)
+    _progress(stats)
     return True, len(page_rows)
 
 
@@ -121,3 +131,14 @@ def _dominant_category(page_rows: list) -> str:
     if not page_rows:
         return ""
     return Counter(r.get("category", "") for r in page_rows).most_common(1)[0][0]
+
+
+def _progress(stats: dict) -> None:
+    pages = int(stats.get("pages", 0))
+    last = int(stats.get("last_progress_pages", 0))
+    if pages < 25 or pages - last < 25:
+        return
+    stats["last_progress_pages"] = pages
+    log.info("progress pages=%d pages_with_data=%d rows=%d invalid=%d tiers=%s",
+             pages, stats.get("with_prices", 0), stats.get("rows", 0),
+             stats.get("invalid", 0), stats.get("tiers") or "{}")

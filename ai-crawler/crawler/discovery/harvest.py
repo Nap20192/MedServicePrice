@@ -26,8 +26,8 @@ async def _discover_agent(start_url: str, store: RouteStore) -> tuple[list[dict]
     """Adaptive discovery: fetch only URLs accepted by the link-selection agent."""
     rows, stats, t0 = [], _new_stats(), time.perf_counter()
     agent = LinkAgent(start_url, store, max_depth=MAX_DEPTH, per_page=AGENT_LINKS_PER_PAGE)
-    log.info("agent discovery started domain=%s start_url=%s max_pages=%d max_depth=%d batch=%d",
-             host(start_url), start_url, MAX_PAGES, MAX_DEPTH, AGENT_BATCH_SIZE)
+    log.info("agent discovery started domain=%s max_pages=%d max_depth=%d batch=%d",
+             host(start_url), MAX_PAGES, MAX_DEPTH, AGENT_BATCH_SIZE)
 
     iteration = 0
     async with URLFetcher() as fetcher:
@@ -51,14 +51,13 @@ async def _discover_agent(start_url: str, store: RouteStore) -> tuple[list[dict]
                 if stats["pages"] < MAX_PAGES and (valid or _has_links(page)):
                     added = agent.consider_page_links(page, page_depth.get(canonical_url(page.url), 0))
                     if not valid and added:
-                        log.info("agent expanded invalid-but-linked page url=%s added=%d",
-                                 _short(page.url), added)
+                        log.debug("agent expanded invalid-but-linked page url=%s added=%d",
+                                  _short(page.url), added)
                 if ESCALATE and n_rows == 0 and _needs_browser(page):
                     browser_retry.append(page.url)
 
             if browser_retry:
-                log.info("agent browser retry shell_pages=%d urls=%s",
-                         len(browser_retry), ",".join(browser_retry[:6]))
+                log.info("agent browser retry shell_pages=%d", len(browser_retry))
                 pages = [
                     page async for page in fetch_urls(
                         browser_retry,
@@ -71,7 +70,7 @@ async def _discover_agent(start_url: str, store: RouteStore) -> tuple[list[dict]
                     if stats["pages"] < MAX_PAGES and (valid or _has_links(page)):
                         agent.consider_page_links(page, page_depth.get(canonical_url(page.url), 0))
 
-    log.info("agent discovery finished domain=%s pages=%d pages_with_data=%d invalid_routes=%d "
+    log.info("RESULT discovery domain=%s pages=%d pages_with_data=%d invalid_routes=%d "
              "rows=%d duration_s=%.1f agent=%s tiers=%s",
              host(start_url), stats["pages"], stats["with_prices"], stats["invalid"], len(rows),
              time.perf_counter() - t0, agent.summary(), stats["tiers"] or "{}")
@@ -89,11 +88,11 @@ async def discover(start_url: str) -> tuple[list[dict], dict, RouteStore]:
         return await _discover_agent(start_url, store)
 
     rows, stats, t0 = [], _new_stats(), time.perf_counter()
-    log.info("discovery started domain=%s start_url=%s", host(start_url), start_url)
+    log.info("discovery started domain=%s", host(start_url))
     async for page in crawl_site(start_url, blocked):
         _process(page, rows, stats, store)
 
-    log.info("discovery finished domain=%s pages=%d pages_with_data=%d invalid_routes=%d rows=%d "
+    log.info("RESULT discovery domain=%s pages=%d pages_with_data=%d invalid_routes=%d rows=%d "
              "duration_s=%.1f tiers=%s", host(start_url), stats["pages"], stats["with_prices"],
              stats["invalid"], len(rows), time.perf_counter() - t0, stats["tiers"] or "{}")
     return rows, stats, store

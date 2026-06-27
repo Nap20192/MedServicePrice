@@ -68,6 +68,7 @@ func main() {
 	clinicRepo := postgres.NewClinicRepository(db)
 	adapterRepo := postgres.NewAdapterRepository(db)
 	priceRepo := postgres.NewPriceRepository(db)
+	schedulerRepo := postgres.NewSchedulerRepository(db)
 
 	// 3. Initialize RabbitMQ
 	rabbitURL := "amqp://msp:msp@localhost:5672/"
@@ -93,9 +94,14 @@ func main() {
 	// 4. Initialize UseCases
 	sourceUC := usecase.NewSourceUseCase(sourceRepo, clinicRepo, adapterRepo, adapterPublisher)
 	priceUC := usecase.NewPriceUseCase(priceRepo)
+	schedulerUC := usecase.NewFetchScheduler(schedulerRepo, sourceUC)
 
 	// 5. Setup HTTP Server
-	router := delivhttp.NewRouter(sourceUC, priceUC)
+	appCtx, cancelApp := context.WithCancel(context.Background())
+	defer cancelApp()
+	schedulerUC.Start(appCtx)
+
+	router := delivhttp.NewRouter(sourceUC, priceUC, schedulerUC)
 	httpPort := os.Getenv("PORT")
 	if httpPort == "" {
 		httpPort = os.Getenv("HTTP_PORT")

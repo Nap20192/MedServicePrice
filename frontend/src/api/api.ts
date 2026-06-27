@@ -8,7 +8,17 @@
 // 4. Всё — страницы и компоненты менять не нужно!
 // ================================================================
 
-import { CreateSourceInput, MedService, SearchFilters, SortMode, SourceCommandResult, SourceDetails } from '../types';
+import {
+  ClinicRecord,
+  CreateClinicInput,
+  CreateSourceInput,
+  MedService,
+  SchedulerSettings,
+  SearchFilters,
+  SortMode,
+  SourceCommandResult,
+  SourceDetails,
+} from '../types';
 import { mockServices } from '../mock/data';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
@@ -122,6 +132,28 @@ export async function createSource(input: CreateSourceInput): Promise<SourceComm
   return apiJson<SourceCommandResult>('/sources', {
     method: 'POST',
     body: JSON.stringify(input),
+  });
+}
+
+export async function listClinics(): Promise<ClinicRecord[]> {
+  return apiJson<ClinicRecord[]>('/clinics');
+}
+
+export async function createClinic(input: CreateClinicInput): Promise<ClinicRecord> {
+  return apiJson<ClinicRecord>('/clinics', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function getSchedulerSettings(): Promise<SchedulerSettings> {
+  return apiJson<SchedulerSettings>('/scheduler');
+}
+
+export async function updateSchedulerSettings(fetchIntervalHours: number): Promise<SchedulerSettings> {
+  return apiJson<SchedulerSettings>('/scheduler', {
+    method: 'PUT',
+    body: JSON.stringify({ fetch_interval_hours: fetchIntervalHours }),
   });
 }
 

@@ -35,6 +35,5 @@ def log_prompt(kind: str, text: str, *, domain: str = "", once_key: str = "",
         if len(body) > len(clipped):
             clipped += f"\n...[truncated {len(body) - len(clipped)} chars]"
         for line in clipped.splitlines() or [""]:
-            log.info("PROMPT_BODY %s", line)
+            log.debug("PROMPT_BODY %s", line)
     log.info("PROMPT_END kind=%s domain=%s sha1=%s", kind, domain or "_unknown", digest)
-

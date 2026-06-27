@@ -63,7 +63,7 @@ async def create_or_update_adapter(start_url: str) -> SiteAdapter:
     domain = host(start_url)
     existing = SiteAdapter.load(domain)
     action = "update" if existing else "create"
-    log.info("adapter %s started url=%s domain=%s", action, start_url, domain)
+    log.info("adapter %s started domain=%s", action, domain)
 
     rows, stats, store = await discover(start_url)
     discovery_duration = time.perf_counter() - t0
@@ -157,8 +157,10 @@ async def create_or_update_adapter(start_url: str) -> SiteAdapter:
     elif rows:
         log.info("adapter discovery extracted rows=%d but output write is disabled "
                  "(set WRITE_DISCOVERY_OUTPUT=1 to persist discovery rows)", len(rows))
-    log.info("adapter %s completed domain=%s data_urls=%d duration_s=%.1f",
-             action, domain, len(adapter.data_urls), time.perf_counter() - t0)
+    log.info("RESULT adapter_%s domain=%s data_urls=%d discovery_rows=%d pages=%d "
+             "pages_with_data=%d duration_s=%.1f",
+             action, domain, len(adapter.data_urls), len(rows), stats["pages"],
+             stats["with_prices"], time.perf_counter() - t0)
     return adapter
 
 
@@ -202,8 +204,10 @@ async def fetch(start_url: str, sink: Sink | None = None) -> int:
         "prices_written": n,
     }
     adapter.save()
-    log.info("fetch completed domain=%s prices=%d duration_s=%.1f invalid_routes=%d sink=%s",
-             domain, n, time.perf_counter() - t0, stats["invalid"], type(sink).__name__)
+    log.info("RESULT fetch domain=%s prices=%d pages=%d pages_with_data=%d invalid_routes=%d "
+             "duration_s=%.1f sink=%s",
+             domain, n, stats["pages"], stats["with_prices"], stats["invalid"],
+             time.perf_counter() - t0, type(sink).__name__)
     return n
 
 

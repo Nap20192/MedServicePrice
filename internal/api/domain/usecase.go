@@ -7,13 +7,17 @@ import (
 )
 
 type CreateSourceInput struct {
-	URL          string
-	ClinicName   string
+	URL      string
+	FetchNow bool
+}
+
+type CreateClinicInput struct {
+	Name         string
 	City         string
 	Address      string
 	Phone        string
 	WorkingHours string
-	FetchNow     bool
+	SourceIDs    []uuid.UUID
 }
 
 type SourceCommandResult struct {
@@ -26,7 +30,16 @@ type SourceCommandResult struct {
 type SourceUseCase interface {
 	AddSource(ctx context.Context, input CreateSourceInput) (*SourceCommandResult, error)
 	ListSources(ctx context.Context) ([]SourceDetails, error)
+	CreateClinic(ctx context.Context, input CreateClinicInput) (*Clinic, error)
+	ListClinics(ctx context.Context) ([]Clinic, error)
 	TriggerFetch(ctx context.Context, sourceID uuid.UUID) (*SourceCommandResult, error)
+	TriggerFetchAll(ctx context.Context, trigger string) (int, error)
+}
+
+type SchedulerUseCase interface {
+	GetSettings(ctx context.Context) (*SchedulerSettings, error)
+	UpdateFetchInterval(ctx context.Context, hours int) (*SchedulerSettings, error)
+	Start(ctx context.Context)
 }
 
 type PriceUseCase interface {

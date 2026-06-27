@@ -42,9 +42,9 @@ export interface Clinic {
 
 export interface SourceDetails {
   id: string;
-  clinic_id: string;
+  clinic_id?: string | null;
   url: string;
-  clinic_name: string;
+  clinic_name?: string | null;
   city?: string | null;
   address?: string | null;
   phone?: string | null;
@@ -54,12 +54,30 @@ export interface SourceDetails {
 
 export interface CreateSourceInput {
   url: string;
-  clinic_name: string;
+  fetch_now?: boolean;
+}
+
+export interface ClinicRecord {
+  id: string;
+  name: string;
+  city?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  working_hours?: string | null;
+}
+
+export interface CreateClinicInput {
+  name: string;
   city?: string;
   address?: string;
   phone?: string;
   working_hours?: string;
-  fetch_now?: boolean;
+  source_ids: string[];
+}
+
+export interface SchedulerSettings {
+  fetch_interval_hours: number;
+  updated_at: string;
 }
 
 export interface SourceCommandResult {

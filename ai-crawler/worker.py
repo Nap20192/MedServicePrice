@@ -239,7 +239,7 @@ async def _ensure_adapter_ready(base_url: str, *, force_rediscover: bool = False
     adapter = SiteAdapter.load(domain)
     if force_rediscover or cfg.REDISCOVER or adapter is None or not adapter.data_urls:
         if force_rediscover or cfg.REDISCOVER:
-            log.info("rediscovering adapter domain=%s base_url=%s", domain, base_url)
+            log.info("rediscovering adapter domain=%s", domain)
         adapter = await create_or_update_adapter(base_url)
     if adapter is None or not adapter.data_urls:
         raise RuntimeError(
@@ -257,7 +257,7 @@ class Worker:
         base_url = data["base_url"]
         config = data.get("config") or {}
         _apply_run_knobs(config)
-        log.info("adapter.create adapter_id=%s base_url=%s", adapter_id, base_url)
+        log.info("TASK adapter.create adapter_id=%s domain=%s", adapter_id, host(base_url))
         await _ensure_adapter_ready(base_url, force_rediscover=_truthy(config.get("rediscover")))
         async with self.pool.acquire() as con:
             await _register_source(
@@ -300,7 +300,7 @@ class Worker:
                     force_rediscover=_truthy(config.get("rediscover")),
                 )
         sink = build_sink(SINK, pool=self.pool, source_id=source_id)
-        log.info("adapter.fetch adapter_id=%s url=%s sink=%s", adapter_id, url, SINK)
+        log.info("TASK adapter.fetch adapter_id=%s domain=%s sink=%s", adapter_id, host(url), SINK)
         rows_written = await fetch(url, sink)
         await self._publish_completed(adapter_id, source_id, rows_written)
 
@@ -322,7 +322,8 @@ class Worker:
             ),
             routing_key=RK_COMPLETED,
         )
-        log.info("published %s adapter_id=%s rows=%d", RK_COMPLETED, adapter_id, rows_written)
+        log.info("RESULT worker adapter_id=%s source_id=%s rows_written=%d event=%s",
+                 adapter_id, source_id, rows_written, RK_COMPLETED)
 
     # -- delivery wrapper ------------------------------------------------------
     def _consumer(self, handler):

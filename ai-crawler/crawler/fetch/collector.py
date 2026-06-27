@@ -25,8 +25,8 @@ async def collect(domain: str, data_urls: list[str], *,
     rows, stats, t0 = [], new_stats(), time.perf_counter()
     browser = [url for url in (browser_urls or []) if url in data_urls]
     http_urls = [url for url in data_urls if url not in set(browser)]
-    log.info("collect started domain=%s http_urls=%d browser_urls=%d urls=%s",
-             domain, len(http_urls), len(browser), ",".join(data_urls[:6]))
+    log.info("collect started domain=%s http_urls=%d browser_urls=%d total_urls=%d",
+             domain, len(http_urls), len(browser), len(data_urls))
 
     escalate: list[str] = []
     if http_urls:
@@ -38,15 +38,14 @@ async def collect(domain: str, data_urls: list[str], *,
 
     browser_batch = list(dict.fromkeys(browser + escalate))
     if escalate:
-        log.info("collect escalating %d javascript-rendered page(s) to headless browser urls=%s",
-                 len(escalate), ",".join(escalate[:6]))
+        log.info("collect browser escalation pages=%d", len(escalate))
     if browser_batch:
         log.debug("collect transport=browser batch=%d urls=%s",
                   len(browser_batch), ",".join(browser_batch[:6]))
         pages = [page async for page in fetch_urls(browser_batch, force_browser=True)]
         await process_pages(pages, rows, stats, store)
 
-    log.info("collect finished domain=%s pages=%d pages_with_data=%d invalid_routes=%d rows=%d "
+    log.info("RESULT collect domain=%s pages=%d pages_with_data=%d invalid_routes=%d rows=%d "
              "escalated=%d duration_s=%.1f tiers=%s", domain, stats["pages"], stats["with_prices"],
              stats["invalid"], len(rows), len(escalate), time.perf_counter() - t0, stats["tiers"] or "{}")
     return rows, stats, store

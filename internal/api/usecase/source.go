@@ -27,10 +27,6 @@ func NewSourceUseCase(sr domain.SourceRepository, cr domain.ClinicRepository, ar
 }
 
 func (uc *sourceUC) AddSource(ctx context.Context, input domain.CreateSourceInput) (*domain.SourceCommandResult, error) {
-	if input.ClinicName == "" {
-		input.ClinicName = "Unknown Clinic"
-	}
-
 	// Check if source already exists
 	existing, err := uc.sourceRepo.GetSourceByURL(ctx, input.URL)
 	if err != nil {
@@ -47,24 +43,9 @@ func (uc *sourceUC) AddSource(ctx context.Context, input domain.CreateSourceInpu
 		return result, nil
 	}
 
-	clinicID := uuid.New()
-	newClinic := &domain.Clinic{
-		ID:           clinicID,
-		Name:         input.ClinicName,
-		City:         optionalString(input.City),
-		Address:      optionalString(input.Address),
-		Phone:        optionalString(input.Phone),
-		WorkingHours: optionalString(input.WorkingHours),
-	}
-
-	if err := uc.clinicRepo.CreateClinic(ctx, newClinic); err != nil {
-		return nil, fmt.Errorf("failed to create clinic: %w", err)
-	}
-
 	newSource := &domain.Source{
-		ID:       uuid.New(),
-		ClinicID: clinicID,
-		URL:      input.URL,
+		ID:  uuid.New(),
+		URL: input.URL,
 	}
 
 	if err := uc.sourceRepo.CreateSource(ctx, newSource); err != nil {
@@ -104,6 +85,31 @@ func (uc *sourceUC) ListSources(ctx context.Context) ([]domain.SourceDetails, er
 	return uc.sourceRepo.ListSources(ctx)
 }
 
+func (uc *sourceUC) CreateClinic(ctx context.Context, input domain.CreateClinicInput) (*domain.Clinic, error) {
+	if input.Name == "" {
+		return nil, fmt.Errorf("clinic name is required")
+	}
+	clinic := &domain.Clinic{
+		ID:           uuid.New(),
+		Name:         input.Name,
+		City:         optionalString(input.City),
+		Address:      optionalString(input.Address),
+		Phone:        optionalString(input.Phone),
+		WorkingHours: optionalString(input.WorkingHours),
+	}
+	if err := uc.clinicRepo.CreateClinic(ctx, clinic); err != nil {
+		return nil, fmt.Errorf("failed to create clinic: %w", err)
+	}
+	if err := uc.sourceRepo.AttachSourcesToClinic(ctx, clinic.ID, input.SourceIDs); err != nil {
+		return nil, fmt.Errorf("failed to attach sources to clinic: %w", err)
+	}
+	return clinic, nil
+}
+
+func (uc *sourceUC) ListClinics(ctx context.Context) ([]domain.Clinic, error) {
+	return uc.clinicRepo.ListClinics(ctx)
+}
+
 func (uc *sourceUC) TriggerFetch(ctx context.Context, sourceID uuid.UUID) (*domain.SourceCommandResult, error) {
 	details, err := uc.sourceRepo.GetSourceByID(ctx, sourceID)
 	if err != nil {
@@ -134,6 +140,22 @@ func (uc *sourceUC) TriggerFetch(ctx context.Context, sourceID uuid.UUID) (*doma
 		FetchQueued:    true,
 		AdapterExisted: adapter != nil,
 	}, nil
+}
+
+func (uc *sourceUC) TriggerFetchAll(ctx context.Context, trigger string) (int, error) {
+	sources, err := uc.sourceRepo.ListFetchableSources(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to list sources: %w", err)
+	}
+	queued := 0
+	for i := range sources {
+		source := sources[i]
+		if err := uc.publishAdapterFetch(ctx, &source, trigger); err != nil {
+			return queued, err
+		}
+		queued++
+	}
+	return queued, nil
 }
 
 func (uc *sourceUC) buildResult(ctx context.Context, sourceID uuid.UUID) (*domain.SourceCommandResult, error) {
@@ -168,16 +190,28 @@ func (uc *sourceUC) publishAdapterFetch(ctx context.Context, source *domain.Sour
 }
 
 func (uc *sourceUC) adapterEventBase(source *domain.SourceDetails) map[string]any {
+	name := "source"
+	if source.ClinicName != nil && *source.ClinicName != "" {
+		name = *source.ClinicName
+	}
 	return map[string]any{
 		"schema_version": 1,
 		"msg_id":         uuid.New().String(),
 		"adapter_id":     source.ID.String(),
 		"source_id":      source.ID.String(),
-		"name":           source.ClinicName,
+		"name":           name,
 		"base_url":       source.URL,
 		"config": map[string]any{
-			"rate_limit_ms": 2000,
-			"max_depth":     3,
+			"rate_limit_ms":             500,
+			"max_depth":                 7,
+			"max_pages":                 3000,
+			"agent_batch_size":          12,
+			"agent_links_per_page":      90,
+			"fetch_concurrency":         24,
+			"page_timeout_ms":           60000,
+			"adapter_compact":           false,
+			"llm_schema_gen":            true,
+			"schema_gen_max_per_domain": 8,
 		},
 	}
 }

@@ -127,8 +127,7 @@ async def crawl_site(start_url: str, blocked: list[str]) -> AsyncIterator[Page]:
             yield page
 
     if shells:
-        log.debug("escalating %d javascript-rendered page(s) to headless browser urls=%s",
-                 len(shells), ",".join(shells[:6]))
+        log.info("browser fallback pages=%d", len(shells))
         async for page in fetch_urls(shells, concurrency=min(CONCURRENCY, 6), force_browser=True):
             yield page
 
@@ -177,8 +176,7 @@ class URLFetcher:
         if self.crawler is None:
             raise RuntimeError("URLFetcher must be used as an async context manager")
         transport = "browser" if self.force_browser else "http"
-        for url in urls:
-            log.debug("http request  method=GET transport=%s url=%s", transport, url)
+        log.debug("http batch transport=%s urls=%d concurrency=%d", transport, len(urls), self.concurrency)
         async for result in await self.crawler.arun_many(urls=list(urls), config=self.cfg):
             page = _to_page(result)
             err = _error(result)
