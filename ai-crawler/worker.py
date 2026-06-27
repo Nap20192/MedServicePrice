@@ -29,7 +29,8 @@ import asyncpg
 import crawler.config as cfg
 from crawler.adapter.adapter import SiteAdapter
 from crawler.config import (DATABASE_URL, RABBITMQ_URL, SINK, WORKER_PREFETCH,
-                            asyncpg_dsn, get_logger, log_llm_config)
+                            WORKER_DECLARE_TOPOLOGY, asyncpg_dsn, get_logger,
+                            log_llm_config, safe_url)
 from crawler.pipeline import create_or_update_adapter, fetch
 from crawler.routing.routes import host
 from crawler.sink import build_sink
@@ -40,6 +41,48 @@ EXCHANGE = "medprice.events"
 Q_CREATE = "q.adapter.create"
 Q_FETCH = "q.adapter.fetch"
 RK_COMPLETED = "parse.completed"
+DLX = "medprice.dlx"
+Q_PARSE_COMPLETED = "q.parse.completed"
+Q_DEAD_LETTER = "q.dead_letter"
+
+
+async def _ensure_topology(channel: aio_pika.abc.AbstractChannel):
+    events = await channel.declare_exchange(EXCHANGE, aio_pika.ExchangeType.TOPIC, durable=True)
+    dlx = await channel.declare_exchange(DLX, aio_pika.ExchangeType.TOPIC, durable=True)
+
+    q_create = await channel.declare_queue(
+        Q_CREATE,
+        durable=True,
+        arguments={
+            "x-dead-letter-exchange": DLX,
+            "x-dead-letter-routing-key": "dlq.adapter.create",
+        },
+    )
+    q_fetch = await channel.declare_queue(
+        Q_FETCH,
+        durable=True,
+        arguments={
+            "x-dead-letter-exchange": DLX,
+            "x-dead-letter-routing-key": "dlq.adapter.fetch",
+        },
+    )
+    q_parse_completed = await channel.declare_queue(
+        Q_PARSE_COMPLETED,
+        durable=True,
+        arguments={
+            "x-dead-letter-exchange": DLX,
+            "x-dead-letter-routing-key": "dlq.parse.completed",
+        },
+    )
+    q_dead = await channel.declare_queue(Q_DEAD_LETTER, durable=True)
+
+    await q_create.bind(events, routing_key="adapter.create")
+    await q_fetch.bind(events, routing_key="adapter.fetch")
+    await q_parse_completed.bind(events, routing_key=RK_COMPLETED)
+    await q_dead.bind(dlx, routing_key="dlq.#")
+    log.info("rabbitmq topology ready exchange=%s queues=%s,%s,%s,%s",
+             EXCHANGE, Q_CREATE, Q_FETCH, Q_PARSE_COMPLETED, Q_DEAD_LETTER)
+    return events, q_create, q_fetch
 
 
 # -- per-run knob mapping ------------------------------------------------------
@@ -246,18 +289,22 @@ class Worker:
 
 async def main() -> None:
     log_llm_config()
-    log.info("worker starting rabbitmq=%s sink=%s prefetch=%d",
-             RABBITMQ_URL, SINK, WORKER_PREFETCH)
+    log.info("worker starting rabbitmq_url=%s postgres_url=%s sink=%s prefetch=%d declare_topology=%s",
+             safe_url(RABBITMQ_URL), safe_url(DATABASE_URL), SINK, WORKER_PREFETCH,
+             WORKER_DECLARE_TOPOLOGY)
 
     pool = await asyncpg.create_pool(asyncpg_dsn(DATABASE_URL), min_size=1, max_size=10)
     connection = await aio_pika.connect_robust(RABBITMQ_URL)
     channel = await connection.channel()
     await channel.set_qos(prefetch_count=WORKER_PREFETCH)
 
-    # Passive lookups only — server already declared these from definitions.json.
-    exchange = await channel.get_exchange(EXCHANGE, ensure=True)
-    q_create = await channel.get_queue(Q_CREATE, ensure=True)
-    q_fetch = await channel.get_queue(Q_FETCH, ensure=True)
+    if WORKER_DECLARE_TOPOLOGY:
+        exchange, q_create, q_fetch = await _ensure_topology(channel)
+    else:
+        # Passive lookups only — use this when topology is managed externally.
+        exchange = await channel.get_exchange(EXCHANGE, ensure=True)
+        q_create = await channel.get_queue(Q_CREATE, ensure=True)
+        q_fetch = await channel.get_queue(Q_FETCH, ensure=True)
 
     worker = Worker(pool, exchange)
     await q_create.consume(worker._consumer(worker.handle_create))

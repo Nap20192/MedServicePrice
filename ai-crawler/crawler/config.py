@@ -13,6 +13,7 @@ import logging
 import os
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 _ROOT = Path(__file__).resolve().parent.parent
 
@@ -221,6 +222,7 @@ SCHEMA_GEN_MAX_PER_DOMAIN = max(0, int(os.environ.get("SCHEMA_GEN_MAX_PER_DOMAIN
 RABBITMQ_URL = os.environ.get("RABBITMQ_URL", "amqp://msp:msp@localhost:5672/")
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgres://msp:msp@localhost:55432/msp")
 WORKER_PREFETCH = max(1, int(os.environ.get("WORKER_PREFETCH", "1")))
+WORKER_DECLARE_TOPOLOGY = _bool("WORKER_DECLARE_TOPOLOGY", "1")
 # Where fetch() persists rows: postgres (worker default) | jsonl (CLI default) | both.
 SINK = os.environ.get("SINK", "postgres").strip().lower()
 
@@ -231,6 +233,20 @@ def asyncpg_dsn(url: str = DATABASE_URL) -> str:
         if url.startswith(prefix):
             return "postgres://" + url[len(prefix):]
     return url
+
+
+def safe_url(url: str) -> str:
+    """Return a log-safe URL with credentials masked."""
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return "<invalid-url>"
+
+    if not parts.netloc or "@" not in parts.netloc:
+        return url
+
+    _, host = parts.netloc.rsplit("@", 1)
+    return urlunsplit((parts.scheme, f"***:***@{host}", parts.path, parts.query, parts.fragment))
 
 
 # -- prompt logging ------------------------------------------------------------
