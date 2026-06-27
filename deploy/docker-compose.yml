@@ -59,7 +59,6 @@ services:
       retries: 20
 
   api:
-    profiles: ["app"]
     build:
       context: ..
       dockerfile: cmd/api/Dockerfile
@@ -85,7 +84,6 @@ services:
       retries: 20
 
   frontend:
-    profiles: ["app"]
     build:
       context: ..
       dockerfile: frontend/Dockerfile
@@ -97,28 +95,7 @@ services:
       api:
         condition: service_healthy
     ports:
-      - "3000:80"
-
-  # ai-crawler RabbitMQ worker (Python 3.13 — lxml has no 3.14 wheel).
-  worker:
-    profiles: ["docker-worker"]
-    build:
-      context: ..
-      dockerfile: ai-crawler/Dockerfile
-    container_name: msp_worker
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
-    environment:
-      RABBITMQ_URL: ${WORKER_RABBITMQ_URL}
-      DATABASE_URL: ${WORKER_DATABASE_URL}
-      SINK: ${SINK}
-      WORKER_PREFETCH: ${WORKER_PREFETCH}
+      - "3000:3000"
 
 volumes:
   pgdata:

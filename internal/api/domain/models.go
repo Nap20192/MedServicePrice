@@ -81,12 +81,12 @@ type ParsedService struct {
 
 // AggregatedPrice represents a join between ParsedService and Clinic for search results
 type AggregatedPrice struct {
-	PriceID        uuid.UUID `json:"price_id"`
-	ClinicID       uuid.UUID `json:"clinic_id"`
-	ClinicName     string    `json:"clinic_name"`
-	City           *string   `json:"city,omitempty"`
-	Address        *string   `json:"address,omitempty"`
-	ServiceNameRaw string    `json:"service_name_raw"`
-	PriceKZT       float64   `json:"price_kzt"`
-	ParsedAt       time.Time `json:"parsed_at"`
+	PriceID        uuid.UUID `db:"price_id" json:"price_id"`
+	ClinicID       uuid.UUID `db:"clinic_id" json:"clinic_id"`
+	ClinicName     string    `db:"clinic_name" json:"clinic_name"`
+	City           *string   `db:"city" json:"city,omitempty"`
+	Address        *string   `db:"address" json:"address,omitempty"`
+	ServiceNameRaw string    `db:"service_name_raw" json:"service_name_raw"`
+	PriceKZT       float64   `db:"price_kzt" json:"price_kzt"`
+	ParsedAt       time.Time `db:"parsed_at" json:"parsed_at"`
 }

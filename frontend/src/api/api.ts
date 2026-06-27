@@ -19,9 +19,48 @@ import {
   SourceCommandResult,
   SourceDetails,
 } from '../types';
-import { mockServices } from '../mock/data';
+// MOCK отключён — используем реальный бэкенд. Оставлено закомментированным.
+// import { mockServices } from '../mock/data';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
+
+// Бэкенд GET /prices возвращает AggregatedPrice (см. internal/api/domain/models.go).
+interface AggregatedPrice {
+  price_id: string;
+  clinic_id: string;
+  clinic_name: string;
+  city?: string | null;
+  address?: string | null;
+  service_name_raw: string;
+  price_kzt: number;
+  parsed_at: string;
+}
+
+// Маппинг ответа бэкенда в богатую модель UI. Поля, которых бэкенд пока не
+// отдаёт (телефон, часы, гео, категория, нормализованное имя), получают дефолты.
+function toMedService(p: AggregatedPrice): MedService {
+  return {
+    clinic_id: p.clinic_id,
+    clinic_name: p.clinic_name,
+    city: p.city ?? '',
+    address: p.address ?? '',
+    phone: '',
+    working_hours: '',
+    source_url: '',
+    lat: 0,
+    lng: 0,
+    service_id: p.price_id,
+    service_name_raw: p.service_name_raw,
+    service_name_norm: p.service_name_raw,
+    category: 'лаборатория',
+    price_kzt: p.price_kzt,
+    currency: 'KZT',
+    duration_days: null,
+    parsed_at: p.parsed_at,
+    is_active: true,
+    online_booking: false,
+  };
+}
 
 // ── Вспомогательные утилиты ──────────────────────────────────
 
@@ -59,12 +98,17 @@ function applySort(data: MedService[], sort: SortMode): MedService[] {
   }
 }
 
-// ── MOCK-РЕЖИМ (активен пока бэкенд не готов) ────────────────
+// ── БЭКЕНД-РЕЖИМ ─────────────────────────────────────────────
+// Реальные данные с GET /prices. Бэкенд фильтрует по q и city; остальные
+// фильтры и сортировка применяются на клиенте (helpers выше).
 
-const MOCK_DELAY = 400; // имитация сетевой задержки
-
-function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+async function fetchPrices(query: string, city?: string): Promise<MedService[]> {
+  const params = new URLSearchParams();
+  if (query.trim()) params.set('q', query.trim());
+  if (city && city !== 'Все города') params.set('city', city);
+  const qs = params.toString();
+  const rows = await apiJson<AggregatedPrice[]>(`/prices${qs ? `?${qs}` : ''}`);
+  return rows.map(toMedService);
 }
 
 export async function searchServices(
@@ -72,53 +116,50 @@ export async function searchServices(
   filters: SearchFilters,
   sort: SortMode
 ): Promise<MedService[]> {
-  await delay(MOCK_DELAY);
-
-  const q = query.trim().toLowerCase();
-  let result = mockServices.filter((s) => s.is_active);
-
-  if (q) {
-    result = result.filter(
-      (s) =>
-        s.service_name_norm.toLowerCase().includes(q) ||
-        s.service_name_raw.toLowerCase().includes(q)
-    );
-  }
-
+  let result = await fetchPrices(query, filters.city);
   result = applyFilters(result, filters);
   result = applySort(result, sort);
   return result;
 }
 
 export async function getClinicById(clinicId: string): Promise<MedService[]> {
-  await delay(MOCK_DELAY);
-  return mockServices.filter((s) => s.clinic_id === clinicId && s.is_active);
+  const all = await fetchPrices('');
+  return all.filter((s) => s.clinic_id === clinicId);
 }
 
 export async function getAutocomplete(query: string): Promise<string[]> {
-  await delay(150);
   if (!query.trim()) return [];
-  const q = query.toLowerCase();
-  const names = [...new Set(mockServices.map((s) => s.service_name_norm))];
-  return names.filter((n) => n.toLowerCase().includes(q)).slice(0, 8);
+  const rows = await fetchPrices(query);
+  const names = [...new Set(rows.map((s) => s.service_name_raw))];
+  return names.slice(0, 8);
 }
 
 export async function getStats(): Promise<{ totalPrices: number; totalClinics: number }> {
-  await delay(200);
-  const clinics = new Set(mockServices.map((s) => s.clinic_id)).size;
-  return { totalPrices: 14200, totalClinics: clinics };
+  const all = await fetchPrices('');
+  const clinics = new Set(all.map((s) => s.clinic_id)).size;
+  return { totalPrices: all.length, totalClinics: clinics };
 }
 
 async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers || {}),
-    },
-  });
+  const method = init?.method || 'GET';
+  const url = `${API_BASE}${path}`;
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(init?.headers || {}),
+      },
+    });
+  } catch (err) {
+    // Сеть недоступна / CORS / DNS — fetch отклонился, ответа нет.
+    console.error(`[api] ${method} ${url} — network error:`, err);
+    throw err;
+  }
   if (!response.ok) {
-    const text = await response.text();
+    const text = await response.text().catch(() => '');
+    console.error(`[api] ${method} ${url} — HTTP ${response.status} ${response.statusText}`, text);
     throw new Error(text || `HTTP ${response.status}`);
   }
   return response.json() as Promise<T>;
