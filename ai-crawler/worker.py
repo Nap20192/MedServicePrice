@@ -27,6 +27,7 @@ import aio_pika
 import asyncpg
 
 import crawler.config as cfg
+from crawler.adapter.adapter import SiteAdapter
 from crawler.config import (DATABASE_URL, RABBITMQ_URL, SINK, WORKER_PREFETCH,
                             asyncpg_dsn, get_logger, log_llm_config)
 from crawler.pipeline import create_or_update_adapter, fetch
@@ -76,12 +77,17 @@ async def _mark_processed(con, msg_id: str, routing_key: str) -> None:
         "ON CONFLICT (msg_id) DO NOTHING", msg_id, routing_key)
 
 
+async def _source_exists(con, source_id: str) -> bool:
+    return await con.fetchval("SELECT 1 FROM sources WHERE id = $1", source_id) is not None
+
+
 async def _register_source(con, adapter_id: str, name: str, base_url: str,
-                           config: dict) -> str:
+                           config: dict, source_id: str | None = None) -> str:
     """Upsert clinic + source for an adapter and persist the mapping. Returns source_id.
 
     Reuses the existing source if the adapter_id is already mapped (re-create just
-    refreshes config); otherwise creates a clinic + source pair.
+    refreshes config). If source_id is supplied by the backend, maps the adapter to
+    that existing source. Otherwise creates a clinic + source pair.
     """
     domain = host(base_url)
     existing = await con.fetchrow(
@@ -92,6 +98,15 @@ async def _register_source(con, adapter_id: str, name: str, base_url: str,
             "updated_at=now() WHERE adapter_id=$1",
             adapter_id, base_url, domain, json.dumps(config))
         return str(existing["source_id"])
+
+    if source_id and await _source_exists(con, source_id):
+        await con.execute(
+            "INSERT INTO adapters (adapter_id, domain, source_id, base_url, config) "
+            "VALUES ($1, $2, $3, $4, $5)",
+            adapter_id, domain, source_id, base_url, json.dumps(config))
+        log.info("registered existing source adapter_id=%s domain=%s source_id=%s",
+                 adapter_id, domain, source_id)
+        return source_id
 
     clinic_id = await con.fetchval(
         "INSERT INTO clinics (name) VALUES ($1) RETURNING id", name or domain)
@@ -119,6 +134,16 @@ async def _resolve_source(con, adapter_id: str, url: str) -> str | None:
     return str(row["source_id"]) if row else None
 
 
+async def _ensure_adapter_ready(base_url: str) -> None:
+    domain = host(base_url)
+    adapter = SiteAdapter.load(domain)
+    if adapter is None or not adapter.data_urls:
+        adapter = await create_or_update_adapter(base_url)
+    if adapter is None or not adapter.data_urls:
+        raise RuntimeError(
+            f"adapter for domain={domain} has no data URLs after discovery")
+
+
 # -- handlers ------------------------------------------------------------------
 class Worker:
     def __init__(self, pool: asyncpg.Pool, exchange: aio_pika.abc.AbstractExchange):
@@ -131,9 +156,16 @@ class Worker:
         config = data.get("config") or {}
         _apply_run_knobs(config)
         log.info("adapter.create adapter_id=%s base_url=%s", adapter_id, base_url)
-        await create_or_update_adapter(base_url)
+        await _ensure_adapter_ready(base_url)
         async with self.pool.acquire() as con:
-            await _register_source(con, adapter_id, data.get("name", ""), base_url, config)
+            await _register_source(
+                con,
+                adapter_id,
+                data.get("name", ""),
+                base_url,
+                config,
+                data.get("source_id"),
+            )
 
     async def handle_fetch(self, data: dict) -> None:
         adapter_id = data["adapter_id"]
@@ -143,9 +175,23 @@ class Worker:
             async with self.pool.acquire() as con:
                 source_id = await _resolve_source(con, adapter_id, url)
             if source_id is None:
-                raise RuntimeError(
-                    f"no source for adapter_id={adapter_id} url={url} — "
-                    f"send adapter.create first")
+                config = data.get("config") or {}
+                base_url = data.get("base_url") or url
+                _apply_run_knobs(config)
+                log.warning("adapter missing for adapter_id=%s url=%s — creating first",
+                            adapter_id, url)
+                await _ensure_adapter_ready(base_url)
+                async with self.pool.acquire() as con:
+                    source_id = await _register_source(
+                        con,
+                        adapter_id,
+                        data.get("name", ""),
+                        base_url,
+                        config,
+                        data.get("source_id"),
+                    )
+            else:
+                await _ensure_adapter_ready(data.get("base_url") or url)
         sink = build_sink(SINK, pool=self.pool, source_id=source_id)
         log.info("adapter.fetch adapter_id=%s url=%s sink=%s", adapter_id, url, SINK)
         rows_written = await fetch(url, sink)

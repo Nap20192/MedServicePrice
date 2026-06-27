@@ -218,8 +218,8 @@ SCHEMA_GEN_MAX_PER_DOMAIN = max(0, int(os.environ.get("SCHEMA_GEN_MAX_PER_DOMAIN
 
 # -- worker / infra (RabbitMQ + Postgres sink) ---------------------------------
 # Used only by worker.py and the Postgres sink; the CLI ignores them.
-RABBITMQ_URL = os.environ.get("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
-DATABASE_URL = os.environ.get("DATABASE_URL", "postgres://msp:msp@localhost:5432/msp")
+RABBITMQ_URL = os.environ.get("RABBITMQ_URL", "amqp://msp:msp@localhost:5672/")
+DATABASE_URL = os.environ.get("DATABASE_URL", "postgres://msp:msp@localhost:55432/msp")
 WORKER_PREFETCH = max(1, int(os.environ.get("WORKER_PREFETCH", "1")))
 # Where fetch() persists rows: postgres (worker default) | jsonl (CLI default) | both.
 SINK = os.environ.get("SINK", "postgres").strip().lower()

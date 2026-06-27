@@ -8,7 +8,9 @@ import (
 
 type SourceRepository interface {
 	CreateSource(ctx context.Context, source *Source) error
+	GetSourceByID(ctx context.Context, id uuid.UUID) (*SourceDetails, error)
 	GetSourceByURL(ctx context.Context, url string) (*Source, error)
+	ListSources(ctx context.Context) ([]SourceDetails, error)
 }
 
 type ClinicRepository interface {
@@ -21,4 +23,8 @@ type ClinicRepository interface {
 type PriceRepository interface {
 	SearchPrices(ctx context.Context, query string, city string) ([]AggregatedPrice, error)
 	UpsertParsedService(ctx context.Context, ps *ParsedService) error
+}
+
+type AdapterRepository interface {
+	GetAdapterByID(ctx context.Context, adapterID string) (*Adapter, error)
 }

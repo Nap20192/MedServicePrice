@@ -3,7 +3,7 @@ package rabbitmq
 import (
 	"context"
 	"fmt"
-	"medprice/internal/domain"
+	"medprice/internal/api/domain"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )

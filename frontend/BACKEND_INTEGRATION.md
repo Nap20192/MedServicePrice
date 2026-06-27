@@ -18,7 +18,7 @@ npm install axios
 ### Шаг 2: Настройте переменные окружения
 Создайте файл `.env` в корне папки `frontend` (если его там еще нет) и пропишите настройки:
 ```env
-VITE_API_BASE_URL=http://localhost:8080
+VITE_API_BASE_URL=http://localhost:8080/api/v1
 VITE_USE_MOCK=false
 ```
 *(Файл `.env` считывается Vite автоматически)*

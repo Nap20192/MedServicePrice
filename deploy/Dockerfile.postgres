@@ -1,0 +1,4 @@
+FROM postgres:16-alpine
+
+# pgcrypto, pg_trgm, unaccent ship in contrib; CREATE EXTENSION lives in migrations.
+ENV LANG=en_US.utf8

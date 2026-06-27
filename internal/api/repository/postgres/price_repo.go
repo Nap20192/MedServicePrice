@@ -6,14 +6,15 @@ import (
 
 	"github.com/jmoiron/sqlx"
 
-	"medprice/internal/domain"
+	"medprice/internal/api/domain"
+	"medprice/internal/platform/database"
 )
 
 type priceRepo struct {
 	db *sqlx.DB
 }
 
-func NewPriceRepository(db *DB) domain.PriceRepository {
+func NewPriceRepository(db *database.DB) domain.PriceRepository {
 	return &priceRepo{db: db.DB}
 }
 

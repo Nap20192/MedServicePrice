@@ -40,6 +40,36 @@ export interface Clinic {
   services: MedService[];
 }
 
+export interface SourceDetails {
+  id: string;
+  clinic_id: string;
+  url: string;
+  clinic_name: string;
+  city?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  working_hours?: string | null;
+  adapter_id?: string | null;
+}
+
+export interface CreateSourceInput {
+  url: string;
+  clinic_name: string;
+  city?: string;
+  address?: string;
+  phone?: string;
+  working_hours?: string;
+  fetch_now?: boolean;
+}
+
+export interface SourceCommandResult {
+  source: SourceDetails;
+  status: string;
+  adapter_queued: boolean;
+  fetch_queued: boolean;
+  adapter_existed: boolean;
+}
+
 export interface SearchFilters {
   city: string;
   category: ServiceCategory | '';

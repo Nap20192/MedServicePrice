@@ -1,0 +1,16 @@
+.git
+.gocache
+.gotmp
+
+frontend/node_modules
+frontend/dist
+
+ai-crawler/.venv
+ai-crawler/state
+ai-crawler/adapters
+ai-crawler/pages
+ai-crawler/output
+
+**/.DS_Store
+**/__pycache__
+**/*.pyc

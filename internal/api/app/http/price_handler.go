@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"medprice/internal/domain"
+	"medprice/internal/api/domain"
 )
 
 type priceHandler struct {

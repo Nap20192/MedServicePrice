@@ -8,14 +8,15 @@ import (
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 
-	"medprice/internal/domain"
+	"medprice/internal/api/domain"
+	"medprice/internal/platform/database"
 )
 
 type sourceRepo struct {
 	db *sqlx.DB
 }
 
-func NewSourceRepository(db *DB) domain.SourceRepository {
+func NewSourceRepository(db *database.DB) domain.SourceRepository {
 	return &sourceRepo{db: db.DB}
 }
 
@@ -23,6 +24,33 @@ func (r *sourceRepo) CreateSource(ctx context.Context, source *domain.Source) er
 	query := `INSERT INTO sources (id, clinic_id, url) VALUES (:id, :clinic_id, :url)`
 	_, err := r.db.NamedExecContext(ctx, query, source)
 	return err
+}
+
+func (r *sourceRepo) GetSourceByID(ctx context.Context, id uuid.UUID) (*domain.SourceDetails, error) {
+	var s domain.SourceDetails
+	query := `
+		SELECT
+			s.id,
+			s.clinic_id,
+			s.url,
+			c.name AS clinic_name,
+			c.city,
+			c.address,
+			c.phone,
+			c.working_hours,
+			a.adapter_id
+		FROM sources s
+		JOIN clinics c ON c.id = s.clinic_id
+		LEFT JOIN adapters a ON a.source_id = s.id
+		WHERE s.id = $1`
+	err := r.db.GetContext(ctx, &s, query, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &s, nil
 }
 
 func (r *sourceRepo) GetSourceByURL(ctx context.Context, url string) (*domain.Source, error) {
@@ -38,11 +66,58 @@ func (r *sourceRepo) GetSourceByURL(ctx context.Context, url string) (*domain.So
 	return &s, nil
 }
 
+func (r *sourceRepo) ListSources(ctx context.Context) ([]domain.SourceDetails, error) {
+	var sources []domain.SourceDetails
+	query := `
+		SELECT
+			s.id,
+			s.clinic_id,
+			s.url,
+			c.name AS clinic_name,
+			c.city,
+			c.address,
+			c.phone,
+			c.working_hours,
+			a.adapter_id
+		FROM sources s
+		JOIN clinics c ON c.id = s.clinic_id
+		LEFT JOIN adapters a ON a.source_id = s.id
+		ORDER BY c.name, s.url`
+	if err := r.db.SelectContext(ctx, &sources, query); err != nil {
+		return nil, err
+	}
+	if sources == nil {
+		sources = []domain.SourceDetails{}
+	}
+	return sources, nil
+}
+
+type adapterRepo struct {
+	db *sqlx.DB
+}
+
+func NewAdapterRepository(db *database.DB) domain.AdapterRepository {
+	return &adapterRepo{db: db.DB}
+}
+
+func (r *adapterRepo) GetAdapterByID(ctx context.Context, adapterID string) (*domain.Adapter, error) {
+	var a domain.Adapter
+	query := `SELECT adapter_id, domain, source_id, base_url FROM adapters WHERE adapter_id = $1`
+	err := r.db.GetContext(ctx, &a, query, adapterID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &a, nil
+}
+
 type clinicRepo struct {
 	db *sqlx.DB
 }
 
-func NewClinicRepository(db *DB) domain.ClinicRepository {
+func NewClinicRepository(db *database.DB) domain.ClinicRepository {
 	return &clinicRepo{db: db.DB}
 }
 

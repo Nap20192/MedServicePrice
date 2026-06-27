@@ -54,27 +54,34 @@ func (p *publisher) Configure(opts ...Option) EventPublisher {
 
 func (p *publisher) PublishEvents(ctx context.Context, events []any) error {
 	for _, e := range events {
-		b, err := json.Marshal(e)
-		if err != nil {
-			return errors.Wrap(err, "publisher-json.Marshal")
-		}
-
-		err = p.Publish(ctx, b, "application/json")
-		if err != nil {
-			return errors.Wrap(err, "publisher-pub.Publish")
+		if err := p.PublishEvent(ctx, p.bindingKey, e); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
+func (p *publisher) PublishEvent(ctx context.Context, routingKey string, event any) error {
+	b, err := json.Marshal(event)
+	if err != nil {
+		return errors.Wrap(err, "publisher-json.Marshal")
+	}
+
+	return p.publish(ctx, routingKey, b, "application/json")
+}
+
 // Publish message.
 func (p *publisher) Publish(ctx context.Context, body []byte, contentType string) error {
-	p.logger.Info("publish message", "exchange", p.exchangeName, "routing_key", p.bindingKey)
+	return p.publish(ctx, p.bindingKey, body, contentType)
+}
+
+func (p *publisher) publish(ctx context.Context, routingKey string, body []byte, contentType string) error {
+	p.logger.Info("publish message", "exchange", p.exchangeName, "routing_key", routingKey)
 
 	if err := p.amqpChan.PublishWithContext(
 		ctx,
 		p.exchangeName,
-		p.bindingKey,
+		routingKey,
 		_publishMandatory,
 		_publishImmediate,
 		amqp.Publishing{

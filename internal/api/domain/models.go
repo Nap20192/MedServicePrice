@@ -21,6 +21,25 @@ type Source struct {
 	URL      string    `json:"url" db:"url"`
 }
 
+type SourceDetails struct {
+	ID           uuid.UUID `json:"id" db:"id"`
+	ClinicID     uuid.UUID `json:"clinic_id" db:"clinic_id"`
+	URL          string    `json:"url" db:"url"`
+	ClinicName   string    `json:"clinic_name" db:"clinic_name"`
+	City         *string   `json:"city,omitempty" db:"city"`
+	Address      *string   `json:"address,omitempty" db:"address"`
+	Phone        *string   `json:"phone,omitempty" db:"phone"`
+	WorkingHours *string   `json:"working_hours,omitempty" db:"working_hours"`
+	AdapterID    *string   `json:"adapter_id,omitempty" db:"adapter_id"`
+}
+
+type Adapter struct {
+	AdapterID string    `json:"adapter_id" db:"adapter_id"`
+	Domain    string    `json:"domain" db:"domain"`
+	SourceID  uuid.UUID `json:"source_id" db:"source_id"`
+	BaseURL   string    `json:"base_url" db:"base_url"`
+}
+
 type ServiceCategory string
 
 const (
@@ -44,15 +63,15 @@ const (
 )
 
 type ParsedService struct {
-	ID               uuid.UUID `json:"id" db:"id"`
-	SourceID         uuid.UUID `json:"source_id" db:"source_id"`
+	ID               uuid.UUID  `json:"id" db:"id"`
+	SourceID         uuid.UUID  `json:"source_id" db:"source_id"`
 	ServiceCatalogID *uuid.UUID `json:"service_catalog_id,omitempty" db:"service_catalog_id"`
-	ServiceNameRaw   string    `json:"service_name_raw" db:"service_name_raw"`
-	PriceKZT         float64   `json:"price_kzt" db:"price_kzt"`
-	Currency         Currency  `json:"currency" db:"currency"`
-	DurationDays     *int      `json:"duration_days,omitempty" db:"duration_days"`
-	ParsedAt         time.Time `json:"parsed_at" db:"parsed_at"`
-	IsActive         bool      `json:"is_active" db:"is_active"`
+	ServiceNameRaw   string     `json:"service_name_raw" db:"service_name_raw"`
+	PriceKZT         float64    `json:"price_kzt" db:"price_kzt"`
+	Currency         Currency   `json:"currency" db:"currency"`
+	DurationDays     *int       `json:"duration_days,omitempty" db:"duration_days"`
+	ParsedAt         time.Time  `json:"parsed_at" db:"parsed_at"`
+	IsActive         bool       `json:"is_active" db:"is_active"`
 }
 
 // AggregatedPrice represents a join between ParsedService and Clinic for search results

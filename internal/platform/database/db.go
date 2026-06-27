@@ -1,4 +1,6 @@
-package postgres
+// Package database holds the shared sqlx/pgx connection used by every service's
+// repository layer (api, normalize). It is infrastructure, not service-specific.
+package database
 
 import (
 	"context"

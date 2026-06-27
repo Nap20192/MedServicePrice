@@ -6,7 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	"medprice/internal/domain"
+	"medprice/internal/api/domain"
 )
 
 type Router struct {
@@ -26,6 +26,8 @@ func NewRouter(sourceUC domain.SourceUseCase, priceUC domain.PriceUseCase) *Rout
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Post("/sources", sh.AddSource)
+		r.Get("/sources", sh.ListSources)
+		r.Post("/sources/{sourceID}/fetch", sh.TriggerFetch)
 		r.Get("/prices", ph.SearchPrices)
 	})
 

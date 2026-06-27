@@ -28,15 +28,15 @@ cd deploy && cp .env.example .env && docker compose up -d postgres rabbitmq migr
 
 # 2. run the worker (local venv)
 cd ../ai-crawler
-RABBITMQ_URL=amqp://guest:guest@localhost:5672/ \
-DATABASE_URL=postgres://msp:msp@localhost:5432/msp \
+RABBITMQ_URL=amqp://msp:msp@localhost:5672/ \
+DATABASE_URL=postgres://msp:msp@localhost:55432/msp \
 SINK=postgres python worker.py
 ```
 
-Or run everything (incl. the worker) in Docker:
+Or run everything (incl. the worker) in Docker via the explicit profile:
 
 ```bash
-cd deploy && docker compose up -d --build
+cd deploy && docker compose --profile docker-worker up -d --build
 ```
 
 ### Flow
@@ -53,8 +53,8 @@ parse.completed ─▶ normalize maps service_name_raw → services_catalog
 
 | Var | Default | Meaning |
 |-----|---------|---------|
-| `RABBITMQ_URL` | `amqp://guest:guest@localhost:5672/` | broker |
-| `DATABASE_URL` | `postgres://msp:msp@localhost:5432/msp` | asyncpg DSN |
+| `RABBITMQ_URL` | `amqp://msp:msp@localhost:5672/` | broker |
+| `DATABASE_URL` | `postgres://msp:msp@localhost:55432/msp` | asyncpg DSN |
 | `WORKER_PREFETCH` | `1` | QoS; keep 1 for discovery (per-run knobs are process-global) |
 | `SINK` | `postgres` | `postgres` \| `jsonl` \| `both` |
 

@@ -123,12 +123,12 @@ Down: drop the index and the constraint.
 > - Config pattern (`crawler/config.py`): every setting is an env var, resolved
 >   env → `.env` → `config.yaml` → default. Reuse it; add new settings there or in a small
 >   `crawler/worker/settings.py`.
-> - Postgres (`migrations/0001_initial.up.sql`): `clinics(id,name,city,address,phone,
+> - Postgres (`migrations/00001_initial.sql`): `clinics(id,name,city,address,phone,
 >   working_hours)`, `sources(id,clinic_id,url)`, `services_catalog(id,name_norm,category)`,
 >   `parsed_services(id,source_id,service_catalog_id,service_name_raw,price_kzt numeric,
 >   currency enum KZT|USD,duration_days,parsed_at,is_active)`. Connection:
->   `DATABASE_URL=postgres://msp:msp@localhost:5432/msp?sslmode=disable`.
-> - RabbitMQ: `AMQP_URL=amqp://guest:guest@localhost:5672/`. Topology is created server-side from
+>   `DATABASE_URL=postgres://msp:msp@localhost:55432/msp?sslmode=disable`.
+> - RabbitMQ: `RABBITMQ_URL=amqp://msp:msp@localhost:5672/`. Topology is created server-side from
 >   `queue/definitions.json` — **do not declare** exchanges/queues in code. Topic exchange
 >   `medprice.events`, DLX `medprice.dlx`. Consume queues `q.adapter.create` and `q.adapter.fetch`.
 >   Deps already pinned: `aio-pika`, `asyncpg`, `apscheduler` (`ai-crawler/requirements.txt`).
@@ -138,7 +138,7 @@ Down: drop the index and the constraint.
 >
 > **Build.**
 > 1. New package `ai-crawler/crawler/worker/`:
->    - `settings.py` — `AMQP_URL`, `DATABASE_URL`, exchange/queue/routing-key names, prefetch.
+>    - `settings.py` — `RABBITMQ_URL`, `DATABASE_URL`, exchange/queue/routing-key names, prefetch.
 >    - `db.py` — asyncpg pool; `ensure_clinic_source(name, base_url) -> source_id`;
 >      `upsert_prices(source_id, rows) -> int` using `INSERT ... ON CONFLICT
 >      (source_id, service_name_raw) DO UPDATE`; `deactivate_stale(source_id, seen_names)`.
@@ -156,7 +156,7 @@ Down: drop the index and the constraint.
 >    Keep `adapter`/`fetch`/`run` exactly as they are.
 > 3. Minimal pipeline refactor so fetched rows are reachable by the worker without re-fetching.
 >    Keep JSONL output behind a flag (e.g. `WRITE_JSONL=0` default in worker mode).
-> 4. New migration `migrations/0002_parsed_services_dedup.{up,down}.sql` adding the unique
+> 4. New goose migration `migrations/00003_parsed_services_dedup.sql` adding the unique
 >    constraint `(source_id, service_name_raw)` and a partial index on `service_catalog_id IS NULL`.
 > 5. Update `queue/definitions.json` + `queue/messages.md`: add outgoing routing keys
 >    `adapter.created`, `parse.completed`, `parse.error`, and a `q.normalize` queue bound to
@@ -201,12 +201,12 @@ Down: drop the index and the constraint.
 > - Конфиг (`crawler/config.py`): любая настройка — это переменная окружения, порядок
 >   `env → .env → config.yaml → default`. Используй этот же механизм; новые настройки положи туда
 >   или в небольшой `crawler/worker/settings.py`.
-> - Postgres (`migrations/0001_initial.up.sql`): таблицы `clinics(id,name,city,address,phone,
+> - Postgres (`migrations/00001_initial.sql`): таблицы `clinics(id,name,city,address,phone,
 >   working_hours)`, `sources(id,clinic_id,url)`, `services_catalog(id,name_norm,category)`,
 >   `parsed_services(id,source_id,service_catalog_id,service_name_raw,price_kzt numeric,
 >   currency enum KZT|USD,duration_days,parsed_at,is_active)`. Подключение:
->   `DATABASE_URL=postgres://msp:msp@localhost:5432/msp?sslmode=disable`.
-> - RabbitMQ: `AMQP_URL=amqp://guest:guest@localhost:5672/`. Топология создаётся на стороне сервера
+>   `DATABASE_URL=postgres://msp:msp@localhost:55432/msp?sslmode=disable`.
+> - RabbitMQ: `RABBITMQ_URL=amqp://msp:msp@localhost:5672/`. Топология создаётся на стороне сервера
 >   из `queue/definitions.json` — **в коде ничего не объявлять** (ни exchange, ни очереди). Topic
 >   exchange `medprice.events`, DLX `medprice.dlx`. Слушать очереди `q.adapter.create` и
 >   `q.adapter.fetch`. Зависимости уже зафиксированы: `aio-pika`, `asyncpg`, `apscheduler`.
@@ -216,7 +216,7 @@ Down: drop the index and the constraint.
 >
 > **Что построить.**
 > 1. Новый пакет `ai-crawler/crawler/worker/`:
->    - `settings.py` — `AMQP_URL`, `DATABASE_URL`, имена exchange/очередей/routing-key, prefetch.
+>    - `settings.py` — `RABBITMQ_URL`, `DATABASE_URL`, имена exchange/очередей/routing-key, prefetch.
 >    - `db.py` — пул asyncpg; `ensure_clinic_source(name, base_url) -> source_id` (идемпотентно
 >      создаёт клинику и источник); `upsert_prices(source_id, rows) -> int` через
 >      `INSERT ... ON CONFLICT (source_id, service_name_raw) DO UPDATE SET price_kzt,

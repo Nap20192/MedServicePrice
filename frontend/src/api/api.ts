@@ -8,8 +8,10 @@
 // 4. Всё — страницы и компоненты менять не нужно!
 // ================================================================
 
-import { MedService, SearchFilters, SortMode } from '../types';
+import { CreateSourceInput, MedService, SearchFilters, SortMode, SourceCommandResult, SourceDetails } from '../types';
 import { mockServices } from '../mock/data';
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
 
 // ── Вспомогательные утилиты ──────────────────────────────────
 
@@ -95,6 +97,39 @@ export async function getStats(): Promise<{ totalPrices: number; totalClinics: n
   await delay(200);
   const clinics = new Set(mockServices.map((s) => s.clinic_id)).size;
   return { totalPrices: 14200, totalClinics: clinics };
+}
+
+async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(init?.headers || {}),
+    },
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `HTTP ${response.status}`);
+  }
+  return response.json() as Promise<T>;
+}
+
+export async function listSources(): Promise<SourceDetails[]> {
+  return apiJson<SourceDetails[]>('/sources');
+}
+
+export async function createSource(input: CreateSourceInput): Promise<SourceCommandResult> {
+  return apiJson<SourceCommandResult>('/sources', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function triggerSourceFetch(sourceId: string): Promise<SourceCommandResult> {
+  return apiJson<SourceCommandResult>(`/sources/${sourceId}/fetch`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
 }
 
 // ── БЭКЕНД-РЕЖИМ (раскомментировать при интеграции) ──────────

@@ -30,6 +30,9 @@ export default function Navbar() {
             <Link to="/search" className="text-slate-500 hover:text-teal-600 font-medium transition-colors text-sm">
               Поиск услуг
             </Link>
+            <Link to="/sources" className="text-slate-500 hover:text-teal-600 font-medium transition-colors text-sm">
+              Источники
+            </Link>
             <button
               onClick={() => navigate('/search?category=лаборатория')}
               className="text-slate-500 hover:text-teal-600 font-medium transition-colors text-sm"
@@ -78,6 +81,7 @@ export default function Navbar() {
           <div className="md:hidden border-t border-slate-100 py-3 space-y-1 animate-fade-in">
             <Link to="/" onClick={() => setMenuOpen(false)} className="block px-3 py-2 text-slate-600 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors text-sm font-medium">Главная</Link>
             <Link to="/search" onClick={() => setMenuOpen(false)} className="block px-3 py-2 text-slate-600 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors text-sm font-medium">Поиск услуг</Link>
+            <Link to="/sources" onClick={() => setMenuOpen(false)} className="block px-3 py-2 text-slate-600 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors text-sm font-medium">Источники</Link>
             <button onClick={() => { navigate('/search?category=лаборатория'); setMenuOpen(false); }} className="block w-full text-left px-3 py-2 text-slate-600 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors text-sm font-medium">Анализы</button>
           </div>
         )}

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"medprice/internal/domain"
+	"medprice/internal/api/domain"
 )
 
 type priceUC struct {

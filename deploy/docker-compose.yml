@@ -1,9 +1,9 @@
-# Postgres + golang-migrate.  cp .env.example .env && docker compose up -d
+# MedServicePrice stack. Copy deploy/.env.example to deploy/.env for local compose.
 services:
   postgres:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.postgres
     container_name: msp_postgres
     restart: unless-stopped
     environment:
@@ -21,29 +21,34 @@ services:
       retries: 20
 
   migrate:
-    image: migrate/migrate:v4.18.1
+    build:
+      context: .
+      dockerfile: Dockerfile.goose
     container_name: msp_migrate
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
       - ../migrations:/migrations:ro
-    command:
-      - "-path=/migrations"
-      - "-database=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
-      - "up"
+    environment:
+      GOOSE_DRIVER: ${GOOSE_DRIVER}
+      GOOSE_DBSTRING: ${GOOSE_DBSTRING}
+      GOOSE_MIGRATION_DIR: ${GOOSE_MIGRATION_DIR}
+    command: ["up"]
     restart: "no"
 
   rabbitmq:
-    image: rabbitmq:3-management
+    build:
+      context: .
+      dockerfile: Dockerfile.rabbitmq
     container_name: msp_rabbitmq
     restart: unless-stopped
     ports:
       - "5672:5672"
       - "15672:15672"
     environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_USER: msp
+      RABBITMQ_DEFAULT_PASS: msp
       RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbitmq_management load_definitions \"/etc/rabbitmq/definitions.json\""
     volumes:
       - ../queue/definitions.json:/etc/rabbitmq/definitions.json:ro
@@ -53,8 +58,50 @@ services:
       timeout: 5s
       retries: 20
 
+  api:
+    profiles: ["app"]
+    build:
+      context: ..
+      dockerfile: cmd/api/Dockerfile
+    container_name: msp_api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${API_DATABASE_URL}
+      RABBITMQ_URL: ${API_RABBITMQ_URL}
+      HTTP_PORT: ${API_HTTP_PORT}
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS}
+      MIGRATIONS_DIR: ${MIGRATIONS_DIR}
+    ports:
+      - "${API_HTTP_PORT}:${API_HTTP_PORT}"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- ${API_PUBLIC_URL}/health >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  frontend:
+    profiles: ["app"]
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${FRONTEND_API_BASE_URL}
+    container_name: msp_frontend
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "3000:80"
+
   # ai-crawler RabbitMQ worker (Python 3.13 — lxml has no 3.14 wheel).
   worker:
+    profiles: ["docker-worker"]
     build:
       context: ..
       dockerfile: ai-crawler/Dockerfile
@@ -68,10 +115,10 @@ services:
       migrate:
         condition: service_completed_successfully
     environment:
-      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
-      DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
-      SINK: postgres
-      WORKER_PREFETCH: "1"
+      RABBITMQ_URL: ${WORKER_RABBITMQ_URL}
+      DATABASE_URL: ${WORKER_DATABASE_URL}
+      SINK: ${SINK}
+      WORKER_PREFETCH: ${WORKER_PREFETCH}
 
 volumes:
   pgdata:

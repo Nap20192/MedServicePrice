@@ -11,7 +11,8 @@ Used to configure or register a new adapter.
 {
   "schema_version": 1,
   "msg_id": "0b9b...uuid",
-  "adapter_id": "kdl_adapter",
+  "adapter_id": "c0ffee00-...-uuid",
+  "source_id": "c0ffee00-...-uuid",
   "name": "KDL Kazakhstan",
   "base_url": "https://kdl.kz",
   "config": {
@@ -30,7 +31,10 @@ Used to trigger an actual data fetch.
 {
   "schema_version": 1,
   "msg_id": "77aa...uuid",
-  "adapter_id": "kdl_adapter",
+  "adapter_id": "c0ffee00-...-uuid",
+  "source_id": "c0ffee00-...-uuid",
+  "name": "KDL Kazakhstan",
+  "base_url": "https://kdl.kz",
   "url": "https://kdl.kz/analyzes",
   "trigger": "schedule",
   "requested_at": "2026-06-27T10:05:00Z"
@@ -68,4 +72,3 @@ queues; the loop is `adapter.fetch → parse.completed → (normalize maps) → 
 > **Proposed, not assumed:** `parse.completed` is the routing key chosen here. If the
 > backend prefers `parse.done`/`normalize.request`, only this key + the
 > `q.parse.completed` binding in `definitions.json` change.
-

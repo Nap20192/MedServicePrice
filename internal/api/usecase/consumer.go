@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"medprice/internal/domain"
+	"medprice/internal/api/domain"
 )
 
 type consumerUC struct {

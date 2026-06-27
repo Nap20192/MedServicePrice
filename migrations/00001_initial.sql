@@ -1,3 +1,4 @@
+-- +goose Up
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE TABLE IF NOT EXISTS clinics (
@@ -15,12 +16,20 @@ CREATE TABLE IF NOT EXISTS sources (
     url TEXT NOT NULL
 );
 
-CREATE TYPE service_category AS ENUM (
-    'лаборатория',
-    'прием врача',
-    'диагностика',
-    'процедура'
-);
+-- +goose StatementBegin
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'service_category') THEN
+        CREATE TYPE service_category AS ENUM (
+            'лаборатория',
+            'прием врача',
+            'диагностика',
+            'процедура'
+        );
+    END IF;
+END
+$$;
+-- +goose StatementEnd
 
 CREATE TABLE IF NOT EXISTS services_catalog (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -28,10 +37,18 @@ CREATE TABLE IF NOT EXISTS services_catalog (
     category service_category NOT NULL
 );
 
-CREATE TYPE currency_enum AS ENUM (
-    'KZT',
-    'USD'
-);
+-- +goose StatementBegin
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'currency_enum') THEN
+        CREATE TYPE currency_enum AS ENUM (
+            'KZT',
+            'USD'
+        );
+    END IF;
+END
+$$;
+-- +goose StatementEnd
 
 CREATE TABLE IF NOT EXISTS parsed_services (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -44,3 +61,12 @@ CREATE TABLE IF NOT EXISTS parsed_services (
     parsed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     is_active BOOLEAN DEFAULT TRUE
 );
+
+-- +goose Down
+DROP TABLE IF EXISTS parsed_services CASCADE;
+DROP TABLE IF EXISTS services_catalog CASCADE;
+DROP TABLE IF EXISTS sources CASCADE;
+DROP TABLE IF EXISTS clinics CASCADE;
+
+DROP TYPE IF EXISTS currency_enum;
+DROP TYPE IF EXISTS service_category;

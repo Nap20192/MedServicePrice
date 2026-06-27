@@ -9,14 +9,14 @@ import (
 	"syscall"
 
 	"github.com/joho/godotenv"
+	"github.com/pressly/goose/v3"
 	"golang.org/x/exp/slog"
 
-	delivhttp "medprice/internal/delivery/http"
-	delivrmq "medprice/internal/delivery/rabbitmq"
-	"medprice/internal/repository/postgres"
-	"medprice/internal/usecase"
+	delivhttp "medprice/internal/api/app/http"
+	"medprice/internal/api/repository/postgres"
+	"medprice/internal/api/usecase"
+	"medprice/internal/platform/database"
 	"medprice/pkg/rabbitmq"
-	"medprice/pkg/rabbitmq/consumer"
 	"medprice/pkg/rabbitmq/publisher"
 )
 
@@ -44,9 +44,9 @@ func main() {
 	// 1. Initialize Database
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		dbURL = "postgres://postgres:postgres@localhost:5432/medprice?sslmode=disable"
+		dbURL = "postgres://msp:msp@localhost:55432/msp?sslmode=disable"
 	}
-	db, err := postgres.NewDB(dbURL)
+	db, err := database.NewDB(dbURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
@@ -56,13 +56,21 @@ func main() {
 	}
 	appLogger.Info("Connected to PostgreSQL")
 
+	if shouldRunMigrations() {
+		if err := runMigrations(db); err != nil {
+			log.Fatalf("Failed to run database migrations: %v", err)
+		}
+		appLogger.Info("Database migrations applied")
+	}
+
 	// 2. Initialize Repositories
 	sourceRepo := postgres.NewSourceRepository(db)
 	clinicRepo := postgres.NewClinicRepository(db)
+	adapterRepo := postgres.NewAdapterRepository(db)
 	priceRepo := postgres.NewPriceRepository(db)
 
 	// 3. Initialize RabbitMQ
-	rabbitURL := "amqp://guest:guest@localhost:5672/"
+	rabbitURL := "amqp://msp:msp@localhost:5672/"
 	if url := os.Getenv("RABBITMQ_URL"); url != "" {
 		rabbitURL = url
 	}
@@ -78,15 +86,13 @@ func main() {
 	}
 	adapterPublisher := pub.Configure(
 		publisher.ExchangeName("medprice.events"),
-		publisher.BindingKey("adapter.create"),
 		publisher.MessageTypeName("event"),
 		publisher.WithLogger(appLogger),
 	)
 
 	// 4. Initialize UseCases
-	sourceUC := usecase.NewSourceUseCase(sourceRepo, clinicRepo, adapterPublisher)
+	sourceUC := usecase.NewSourceUseCase(sourceRepo, clinicRepo, adapterRepo, adapterPublisher)
 	priceUC := usecase.NewPriceUseCase(priceRepo)
-	consumerUC := usecase.NewConsumerUseCase(priceRepo, clinicRepo, sourceRepo)
 
 	// 5. Setup HTTP Server
 	router := delivhttp.NewRouter(sourceUC, priceUC)
@@ -107,23 +113,6 @@ func main() {
 		}
 	}()
 
-	// 6. Setup RabbitMQ Consumer (demonstrating adapter.fetch)
-	priceConsumerHandler := delivrmq.NewConsumer(consumerUC)
-	adapterFetchConsumer := consumer.NewConsumer(conn).Configure(
-		consumer.QueueName("q.adapter.fetch"),
-		consumer.ConsumerTag("go-adapter-fetch-consumer"),
-		consumer.WorkerPoolSize(10),
-		consumer.WithLogger(appLogger),
-	)
-
-	go func() {
-		appLogger.Info("Starting RabbitMQ consumer on q.adapter.fetch")
-		err := adapterFetchConsumer.StartConsumer(priceConsumerHandler.Handler)
-		if err != nil {
-			appLogger.Error("adapterFetchConsumer stopped", "err", err)
-		}
-	}()
-
 	// Wait for termination signal
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -133,4 +122,20 @@ func main() {
 	if err := server.Shutdown(context.Background()); err != nil {
 		appLogger.Error("HTTP server shutdown error", "err", err)
 	}
+}
+
+func shouldRunMigrations() bool {
+	return os.Getenv("RUN_MIGRATIONS") != "0"
+}
+
+func runMigrations(db *database.DB) error {
+	migrationsDir := os.Getenv("MIGRATIONS_DIR")
+	if migrationsDir == "" {
+		migrationsDir = "migrations"
+	}
+
+	if err := goose.SetDialect("postgres"); err != nil {
+		return err
+	}
+	return goose.Up(db.DB.DB, migrationsDir)
 }
