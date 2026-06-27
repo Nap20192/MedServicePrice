@@ -96,7 +96,10 @@ func main() {
 
 	// 5. Setup HTTP Server
 	router := delivhttp.NewRouter(sourceUC, priceUC)
-	httpPort := os.Getenv("HTTP_PORT")
+	httpPort := os.Getenv("PORT")
+	if httpPort == "" {
+		httpPort = os.Getenv("HTTP_PORT")
+	}
 	if httpPort == "" {
 		httpPort = "8080"
 	}
