@@ -11,21 +11,38 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 	"golang.org/x/exp/slog"
 
-	"medprice/queue/rabbitmq"
-	"medprice/queue/rabbitmq/consumer"
-	"medprice/queue/rabbitmq/publisher"
+	"medprice/pkg/rabbitmq"
+	"medprice/pkg/rabbitmq/consumer"
+	"medprice/pkg/rabbitmq/publisher"
 )
+
+// slogWrapper implements rabbitmq.Logger using slog
+type slogWrapper struct {
+	l *slog.Logger
+}
+
+func (w *slogWrapper) Info(msg string, args ...any) {
+	w.l.Info(msg, args...)
+}
+
+func (w *slogWrapper) Error(msg string, args ...any) {
+	w.l.Error(msg, args...)
+}
 
 func main() {
 	// Configure slog
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	baseLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	slog.SetDefault(baseLogger)
+
+	// Create our injected logger
+	appLogger := &slogWrapper{l: baseLogger}
 
 	rabbitURL := "amqp://guest:guest@localhost:5672/"
 	if url := os.Getenv("RABBITMQ_URL"); url != "" {
 		rabbitURL = url
 	}
 
-	conn, err := rabbitmq.NewRabbitMQConn(rabbitmq.RabbitMQConnStr(rabbitURL))
+	conn, err := rabbitmq.NewRabbitMQConn(rabbitmq.RabbitMQConnStr(rabbitURL), appLogger)
 	if err != nil {
 		log.Fatalf("Failed to connect to rabbitmq: %v", err)
 	}
@@ -36,24 +53,25 @@ func main() {
 		consumer.QueueName("q.price.found"),
 		consumer.ConsumerTag("go-price-consumer"),
 		consumer.WorkerPoolSize(10),
+		consumer.WithLogger(appLogger),
 	)
 
 	go func() {
 		err := priceFoundConsumer.StartConsumer(func(ctx context.Context, messages <-chan amqp.Delivery) {
 			for msg := range messages {
-				slog.Info("Received message on q.price.found", "body", string(msg.Body))
+				appLogger.Info("Received message on q.price.found", "body", string(msg.Body))
 
 				// Simulate processing
 				time.Sleep(100 * time.Millisecond)
 
 				// Manual ack after processing (e.g. DB upsert)
 				if err := msg.Ack(false); err != nil {
-					slog.Error("failed to ack message", "err", err)
+					appLogger.Error("failed to ack message", "err", err)
 				}
 			}
 		})
 		if err != nil {
-			slog.Error("priceFoundConsumer stopped", "err", err)
+			appLogger.Error("priceFoundConsumer stopped", "err", err)
 		}
 	}()
 
@@ -67,6 +85,7 @@ func main() {
 		publisher.ExchangeName("medprice.events"),
 		publisher.BindingKey("parse.start"),
 		publisher.MessageTypeName("event"),
+		publisher.WithLogger(appLogger),
 	)
 
 	// Publish a mock message every 5 seconds
@@ -79,19 +98,19 @@ func main() {
 				"source_code":    "kdl",
 				"trigger":        "schedule",
 			}
-			slog.Info("Publishing parse.start event...")
+			appLogger.Info("Publishing parse.start event...")
 			if err := parseStartPublisher.PublishEvents(context.Background(), []any{mockPayload}); err != nil {
-				slog.Error("failed to publish", "err", err)
+				appLogger.Error("failed to publish", "err", err)
 			}
 		}
 	}()
 
-	slog.Info("RabbitMQ consumers and publishers started. Press Ctrl+C to exit.")
+	appLogger.Info("RabbitMQ consumers and publishers started. Press Ctrl+C to exit.")
 
 	// Wait for termination signal
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	slog.Info("Shutting down...")
+	appLogger.Info("Shutting down...")
 }

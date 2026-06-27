@@ -1,5 +1,7 @@
 package consumer
 
+import "medprice/pkg/rabbitmq"
+
 type Option func(*consumer)
 
 func QueueName(queueName string) Option {
@@ -17,5 +19,13 @@ func ConsumerTag(consumerTag string) Option {
 func WorkerPoolSize(workerPoolSize int) Option {
 	return func(p *consumer) {
 		p.workerPoolSize = workerPoolSize
+	}
+}
+
+func WithLogger(logger rabbitmq.Logger) Option {
+	return func(p *consumer) {
+		if logger != nil {
+			p.logger = logger
+		}
 	}
 }

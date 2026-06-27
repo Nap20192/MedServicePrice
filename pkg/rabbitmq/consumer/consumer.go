@@ -5,7 +5,7 @@ import (
 
 	"github.com/pkg/errors"
 	amqp "github.com/rabbitmq/amqp091-go"
-	"golang.org/x/exp/slog"
+	"medprice/pkg/rabbitmq"
 )
 
 const (
@@ -26,6 +26,7 @@ type consumer struct {
 	consumerTag    string
 	workerPoolSize int
 	amqpConn       *amqp.Connection
+	logger         rabbitmq.Logger
 }
 
 var _ EventConsumer = (*consumer)(nil)
@@ -36,6 +37,7 @@ func NewConsumer(amqpConn *amqp.Connection) EventConsumer {
 		queueName:      "", // MUST be set via options
 		consumerTag:    "default-consumer",
 		workerPoolSize: _workerPoolSize,
+		logger:         rabbitmq.DefaultLogger,
 	}
 }
 
@@ -77,7 +79,7 @@ func (c *consumer) StartConsumer(fn worker) error {
 	}
 
 	chanErr := <-ch.NotifyClose(make(chan *amqp.Error))
-	slog.Error("rabbitmq channel closed", "err", chanErr)
+	c.logger.Error("rabbitmq channel closed", "err", chanErr)
 	<-forever
 
 	return chanErr

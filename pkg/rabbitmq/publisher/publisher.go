@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	amqp "github.com/rabbitmq/amqp091-go"
-	"golang.org/x/exp/slog"
+	"medprice/pkg/rabbitmq"
 )
 
 const (
@@ -22,6 +22,7 @@ type publisher struct {
 	messageTypeName string
 	amqpChan        *amqp.Channel
 	amqpConn        *amqp.Connection
+	logger          rabbitmq.Logger
 }
 
 var _ EventPublisher = (*publisher)(nil)
@@ -38,6 +39,7 @@ func NewPublisher(amqpConn *amqp.Connection) (EventPublisher, error) {
 		exchangeName:    "medprice.events", // default from topology
 		bindingKey:      "",                // MUST be set via options or per message
 		messageTypeName: "event",
+		logger:          rabbitmq.DefaultLogger,
 	}
 
 	return pub, nil
@@ -67,7 +69,7 @@ func (p *publisher) PublishEvents(ctx context.Context, events []any) error {
 
 // Publish message.
 func (p *publisher) Publish(ctx context.Context, body []byte, contentType string) error {
-	slog.Info("publish message", "exchange", p.exchangeName, "routing_key", p.bindingKey)
+	p.logger.Info("publish message", "exchange", p.exchangeName, "routing_key", p.bindingKey)
 
 	if err := p.amqpChan.PublishWithContext(
 		ctx,

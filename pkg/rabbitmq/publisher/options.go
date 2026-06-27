@@ -1,5 +1,7 @@
 package publisher
 
+import "medprice/pkg/rabbitmq"
+
 type Option func(*publisher)
 
 func ExchangeName(exchangeName string) Option {
@@ -17,5 +19,13 @@ func BindingKey(bindingKey string) Option {
 func MessageTypeName(messageTypeName string) Option {
 	return func(p *publisher) {
 		p.messageTypeName = messageTypeName
+	}
+}
+
+func WithLogger(logger rabbitmq.Logger) Option {
+	return func(p *publisher) {
+		if logger != nil {
+			p.logger = logger
+		}
 	}
 }
