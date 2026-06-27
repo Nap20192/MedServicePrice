@@ -11,25 +11,17 @@ RUN npm ci
 COPY frontend/ .
 RUN npm run build
 
-FROM nginx:1.29-alpine
+FROM node:24-alpine
 
-ENV PORT=80
+WORKDIR /app
 
-RUN rm /etc/nginx/conf.d/default.conf
-COPY --from=build /app/dist /usr/share/nginx/html
-RUN mkdir -p /etc/nginx/templates \
-    && printf '%s\n' \
-    'server {' \
-    '    listen ${PORT};' \
-    '    server_name _;' \
-    '' \
-    '    root /usr/share/nginx/html;' \
-    '    index index.html;' \
-    '' \
-    '    location / {' \
-    '        try_files $uri $uri/ /index.html;' \
-    '    }' \
-    '}' \
-    > /etc/nginx/templates/default.conf.template
+ENV PORT=3000
+ENV NODE_ENV=production
 
-EXPOSE 80
+COPY --from=build /app/package.json /app/package-lock.json ./
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+
+EXPOSE 3000
+
+CMD ["sh", "-c", "npm run preview -- --host 0.0.0.0 --port ${PORT:-3000}"]
