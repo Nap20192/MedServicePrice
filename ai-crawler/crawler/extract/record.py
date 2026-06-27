@@ -41,6 +41,26 @@ def build_record(row: dict, instructions: dict | None = None) -> dict | None:
     }
 
 
+def clean_records(rows: list[dict], fields: list[str] | None = None,
+                  instructions: dict | None = None) -> list[dict]:
+    """Build, dedupe and project extracted rows onto the output schema.
+
+    Single source of truth shared by every sink (JSONL, Postgres). Dedup key is
+    service_name_raw + price_kzt + duration_days + url (see record_key)."""
+    seen: set[tuple] = set()
+    out: list[dict] = []
+    for rec in rows:
+        built = build_record(rec, instructions)
+        if built is None:
+            continue
+        key = record_key(built)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({field: built.get(field) for field in (fields or OUTPUT_SCHEMA)})
+    return out
+
+
 def _build_meta(row: dict, category: str) -> dict:
     """Nested context for a price row: extractor group/specialty + category."""
     meta = dict(row.get("meta") or {})

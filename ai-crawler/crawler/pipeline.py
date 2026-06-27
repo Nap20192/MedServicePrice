@@ -16,10 +16,11 @@ from crawler.common.canonical import canonical_url
 from crawler.fetch.collector import collect
 from crawler.config import REDISCOVER, WRITE_DISCOVERY_OUTPUT, get_logger
 from crawler.discovery.harvest import discover
-from crawler.output.output import output_path, write_rows
-from crawler.extract.record import OUTPUT_SCHEMA
+from crawler.output.output import write_rows
+from crawler.extract.record import OUTPUT_SCHEMA, clean_records
 from crawler.routing.routes import host
 from crawler.routing.urlinfo import url_metadata
+from crawler.sink import JsonlSink, Sink
 
 log = get_logger(__name__)
 
@@ -161,11 +162,14 @@ async def create_or_update_adapter(start_url: str) -> SiteAdapter:
     return adapter
 
 
-async def fetch(start_url: str) -> int:
+async def fetch(start_url: str, sink: Sink | None = None) -> int:
     """Walk the adapter's saved data-URLs and fetch fresh data from each.
 
     Pure fetch step: it reads the adapter as a fixed plan and does not rediscover
-    or rewrite it. Adapter (re)building is create_or_update_adapter's job."""
+    or rewrite it. Adapter (re)building is create_or_update_adapter's job.
+
+    `sink` decides where rows land. Default (None) = JSONL, preserving the CLI
+    behaviour; the worker passes a Postgres (or fan-out) sink instead."""
     t0 = time.perf_counter()
     started_at = datetime.now(timezone.utc).isoformat()
     domain = host(start_url)
@@ -180,7 +184,10 @@ async def fetch(start_url: str) -> int:
              domain, len(adapter.data_urls), len(browser_urls), adapter.method)
     rows, stats, store = await collect(domain, adapter.data_urls, browser_urls=browser_urls)
     store.save()
-    n = write_rows(rows, OUTPUT_SCHEMA, adapter.fetch_instructions, domain=domain)
+    if sink is None:
+        sink = JsonlSink()
+    records = clean_records(rows, OUTPUT_SCHEMA, adapter.fetch_instructions)
+    n = await sink.emit(records, domain=domain)
     adapter.run_info["last_fetch"] = {
         "command": "fetch",
         "start_url": start_url,
@@ -195,14 +202,14 @@ async def fetch(start_url: str) -> int:
         "prices_written": n,
     }
     adapter.save()
-    log.info("fetch completed domain=%s prices=%d duration_s=%.1f invalid_routes=%d output=%s",
-             domain, n, time.perf_counter() - t0, stats["invalid"], output_path(domain))
+    log.info("fetch completed domain=%s prices=%d duration_s=%.1f invalid_routes=%d sink=%s",
+             domain, n, time.perf_counter() - t0, stats["invalid"], type(sink).__name__)
     return n
 
 
-async def run(start_url: str) -> int:
+async def run(start_url: str, sink: Sink | None = None) -> int:
     """Convenience: ensure an adapter exists (create/update), then fetch through it."""
     adapter = SiteAdapter.load(host(start_url))
     if REDISCOVER or adapter is None or not adapter.data_urls:
         await create_or_update_adapter(start_url)
-    return await fetch(start_url)
+    return await fetch(start_url, sink)

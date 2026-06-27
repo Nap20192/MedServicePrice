@@ -216,6 +216,23 @@ LLM_CONCURRENCY = max(1, int(os.environ.get("LLM_CONCURRENCY", "5")))
 # site with many distinct page structures cannot trigger dozens of ~90s LLM calls.
 SCHEMA_GEN_MAX_PER_DOMAIN = max(0, int(os.environ.get("SCHEMA_GEN_MAX_PER_DOMAIN", "2")))
 
+# -- worker / infra (RabbitMQ + Postgres sink) ---------------------------------
+# Used only by worker.py and the Postgres sink; the CLI ignores them.
+RABBITMQ_URL = os.environ.get("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
+DATABASE_URL = os.environ.get("DATABASE_URL", "postgres://msp:msp@localhost:5432/msp")
+WORKER_PREFETCH = max(1, int(os.environ.get("WORKER_PREFETCH", "1")))
+# Where fetch() persists rows: postgres (worker default) | jsonl (CLI default) | both.
+SINK = os.environ.get("SINK", "postgres").strip().lower()
+
+
+def asyncpg_dsn(url: str = DATABASE_URL) -> str:
+    """asyncpg accepts postgres://; normalize the postgresql+driver forms just in case."""
+    for prefix in ("postgresql+asyncpg://", "postgresql://"):
+        if url.startswith(prefix):
+            return "postgres://" + url[len(prefix):]
+    return url
+
+
 # -- prompt logging ------------------------------------------------------------
 LOG_PROMPTS = _bool("LOG_PROMPTS", "1")
 # Full prompt body = the entire ~60k-char HTML dumped line-by-line. Off by default;

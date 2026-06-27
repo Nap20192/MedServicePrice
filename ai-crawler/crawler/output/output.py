@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 from crawler.config import OUTPUT_DIR, OUTPUT_PATH, PAGES_DIR, SAVE_PAGES, get_logger
-from crawler.extract.record import OUTPUT_SCHEMA, build_record, record_key
+from crawler.extract.record import OUTPUT_SCHEMA, clean_records
 
 log = get_logger(__name__)
 
@@ -61,17 +61,7 @@ def write_rows(rows: list[dict], fields: list[str] | None = None,
     """Dedupe and write rows in the MedServicePrice JSONL schema.
 
     Writes to <domain>-prices.jsonl (or OUTPUT_PATH if forced)."""
-    seen, clean = set(), []
-    for rec in rows:
-        out = build_record(rec, instructions)
-        if out is None:
-            continue
-        key = record_key(out)
-        if key in seen:
-            continue
-        seen.add(key)
-        projected = {field: out.get(field) for field in (fields or OUTPUT_SCHEMA)}
-        clean.append(projected)
+    clean = clean_records(rows, fields or OUTPUT_SCHEMA, instructions)
     path = output_path(domain)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as fh:

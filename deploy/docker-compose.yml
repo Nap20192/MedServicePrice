@@ -47,6 +47,31 @@ services:
       RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbitmq_management load_definitions \"/etc/rabbitmq/definitions.json\""
     volumes:
       - ../queue/definitions.json:/etc/rabbitmq/definitions.json:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # ai-crawler RabbitMQ worker (Python 3.13 — lxml has no 3.14 wheel).
+  worker:
+    build:
+      context: ..
+      dockerfile: ai-crawler/Dockerfile
+    container_name: msp_worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
+      DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
+      SINK: postgres
+      WORKER_PREFETCH: "1"
 
 volumes:
   pgdata:

@@ -45,6 +45,16 @@
       }
     },
     {
+      "name": "q.parse.completed",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "medprice.dlx",
+        "x-dead-letter-routing-key": "dlq.parse.completed"
+      }
+    },
+    {
       "name": "q.dead_letter",
       "vhost": "/",
       "durable": true,
@@ -53,6 +63,14 @@
     }
   ],
   "bindings": [
+    {
+      "source": "medprice.events",
+      "vhost": "/",
+      "destination": "q.parse.completed",
+      "destination_type": "queue",
+      "routing_key": "parse.completed",
+      "arguments": {}
+    },
     {
       "source": "medprice.events",
       "vhost": "/",
