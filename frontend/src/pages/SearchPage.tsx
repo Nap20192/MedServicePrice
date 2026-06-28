@@ -9,6 +9,7 @@ import { SearchFilters, SortMode, ServiceCategory } from '../types';
 const MapView = lazy(() => import('../components/MapView'));
 
 const PRICE_MAX = 200000;
+const PAGE_SIZE = 20;
 
 type ViewMode = 'list' | 'map';
 
@@ -45,6 +46,19 @@ export default function SearchPage() {
   }, [searchParams]);
 
   const { data, loading } = useMedicalServices(query, filters, sort);
+
+  // Пагинация списка
+  const [page, setPage] = useState(1);
+  const pageCount = Math.max(1, Math.ceil(data.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount);
+  const pageItems = data.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const rangeStart = data.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(safePage * PAGE_SIZE, data.length);
+
+  // Сброс на первую страницу при смене запроса/фильтров/сортировки
+  useEffect(() => {
+    setPage(1);
+  }, [query, JSON.stringify(filters), sort]);
 
   const handleSearch = useCallback((q: string, city: string) => {
     const params = new URLSearchParams();
@@ -208,6 +222,9 @@ export default function SearchPage() {
                     <>
                       Найдено <span className="font-semibold text-slate-800">{data.length}</span> предложений
                       {query && <> по запросу «<span className="font-medium text-teal-600">{query}</span>»</>}
+                      {data.length > PAGE_SIZE && (
+                        <span className="text-slate-400"> · показаны {rangeStart}–{rangeEnd}</span>
+                      )}
                     </>
                   )}
                 </p>
@@ -275,11 +292,52 @@ export default function SearchPage() {
                     <p className="text-slate-400">Попробуйте изменить запрос или сбросить фильтры</p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {data.map((service) => (
-                      <ServiceCard key={service.service_id} service={service} showCity={filters.city === 'Все города'} />
-                    ))}
-                  </div>
+                  <>
+                    <div className="space-y-4">
+                      {pageItems.map((service) => (
+                        <ServiceCard key={service.service_id} service={service} showCity={filters.city === 'Все города'} />
+                      ))}
+                    </div>
+
+                    {pageCount > 1 && (
+                      <div className="flex items-center justify-center gap-1 mt-8" id="pagination">
+                        <button
+                          onClick={() => setPage((p) => Math.max(1, p - 1))}
+                          disabled={safePage === 1}
+                          className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors"
+                          id="pagination-prev"
+                        >
+                          ← Назад
+                        </button>
+                        {Array.from({ length: pageCount }, (_, i) => i + 1)
+                          .filter((n) => n === 1 || n === pageCount || Math.abs(n - safePage) <= 1)
+                          .map((n, idx, arr) => (
+                            <React.Fragment key={n}>
+                              {idx > 0 && n - arr[idx - 1] > 1 && <span className="px-1 text-slate-300">…</span>}
+                              <button
+                                onClick={() => setPage(n)}
+                                className={`min-w-9 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                                  n === safePage
+                                    ? 'bg-teal-500 text-white border-teal-500'
+                                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                                }`}
+                                id={`pagination-page-${n}`}
+                              >
+                                {n}
+                              </button>
+                            </React.Fragment>
+                          ))}
+                        <button
+                          onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                          disabled={safePage === pageCount}
+                          className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors"
+                          id="pagination-next"
+                        >
+                          Вперёд →
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             ) : (

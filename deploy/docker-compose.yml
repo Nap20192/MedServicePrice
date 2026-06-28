@@ -83,6 +83,23 @@ services:
       timeout: 3s
       retries: 20
 
+  # Normalize service: reads raw parsed_services, binds to the catalog, publishes
+  # service_offers (gold). Sole reader of the raw layer; driven by q.parse.completed.
+  normalize:
+    build:
+      context: ..
+      dockerfile: cmd/normalize/Dockerfile
+    container_name: msp_normalize
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${API_DATABASE_URL}
+      RABBITMQ_URL: ${API_RABBITMQ_URL}
+
   frontend:
     build:
       context: ..

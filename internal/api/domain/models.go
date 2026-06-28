@@ -67,26 +67,18 @@ const (
 	CurrencyUSD Currency = "USD"
 )
 
-type ParsedService struct {
-	ID               uuid.UUID  `json:"id" db:"id"`
-	SourceID         uuid.UUID  `json:"source_id" db:"source_id"`
-	ServiceCatalogID *uuid.UUID `json:"service_catalog_id,omitempty" db:"service_catalog_id"`
-	ServiceNameRaw   string     `json:"service_name_raw" db:"service_name_raw"`
-	PriceKZT         float64    `json:"price_kzt" db:"price_kzt"`
-	Currency         Currency   `json:"currency" db:"currency"`
-	DurationDays     *int       `json:"duration_days,omitempty" db:"duration_days"`
-	ParsedAt         time.Time  `json:"parsed_at" db:"parsed_at"`
-	IsActive         bool       `json:"is_active" db:"is_active"`
-}
-
-// AggregatedPrice represents a join between ParsedService and Clinic for search results
+// AggregatedPrice is a published, normalized price for search results. It is built
+// from service_offers JOIN services_catalog JOIN clinics — never from raw
+// parsed_services, so the API never exposes raw service names.
 type AggregatedPrice struct {
-	PriceID        uuid.UUID `db:"price_id" json:"price_id"`
-	ClinicID       uuid.UUID `db:"clinic_id" json:"clinic_id"`
-	ClinicName     string    `db:"clinic_name" json:"clinic_name"`
-	City           *string   `db:"city" json:"city,omitempty"`
-	Address        *string   `db:"address" json:"address,omitempty"`
-	ServiceNameRaw string    `db:"service_name_raw" json:"service_name_raw"`
-	PriceKZT       float64   `db:"price_kzt" json:"price_kzt"`
-	ParsedAt       time.Time `db:"parsed_at" json:"parsed_at"`
+	PriceID         uuid.UUID `db:"price_id" json:"price_id"`
+	ClinicID        uuid.UUID `db:"clinic_id" json:"clinic_id"`
+	ClinicName      string    `db:"clinic_name" json:"clinic_name"`
+	ClinicURL       *string   `db:"clinic_url" json:"clinic_url,omitempty"`
+	City            *string   `db:"city" json:"city,omitempty"`
+	Address         *string   `db:"address" json:"address,omitempty"`
+	ServiceNameNorm string    `db:"service_name_norm" json:"service_name_norm"`
+	Category        string    `db:"category" json:"category"`
+	PriceKZT        float64   `db:"price_kzt" json:"price_kzt"`
+	ParsedAt        time.Time `db:"parsed_at" json:"parsed_at"`
 }

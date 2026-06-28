@@ -15,6 +15,7 @@ import {
   MedService,
   SchedulerSettings,
   SearchFilters,
+  ServiceCategory,
   SortMode,
   SourceCommandResult,
   SourceDetails,
@@ -29,11 +30,21 @@ interface AggregatedPrice {
   price_id: string;
   clinic_id: string;
   clinic_name: string;
+  clinic_url?: string | null;
   city?: string | null;
   address?: string | null;
-  service_name_raw: string;
+  service_name_norm: string;
+  category: string;
   price_kzt: number;
   parsed_at: string;
+}
+
+const KNOWN_CATEGORIES: ServiceCategory[] = ['лаборатория', 'приём врача', 'диагностика', 'процедура'];
+
+function toCategory(c: string): ServiceCategory {
+  // Бэкенд хранит 'прием врача' (без ё) — нормализуем к UI-варианту.
+  const v = c === 'прием врача' ? 'приём врача' : c;
+  return (KNOWN_CATEGORIES as string[]).includes(v) ? (v as ServiceCategory) : 'лаборатория';
 }
 
 // Маппинг ответа бэкенда в богатую модель UI. Поля, которых бэкенд пока не
@@ -46,13 +57,12 @@ function toMedService(p: AggregatedPrice): MedService {
     address: p.address ?? '',
     phone: '',
     working_hours: '',
-    source_url: '',
+    source_url: p.clinic_url ?? '',
     lat: 0,
     lng: 0,
     service_id: p.price_id,
-    service_name_raw: p.service_name_raw,
-    service_name_norm: p.service_name_raw,
-    category: 'лаборатория',
+    service_name_norm: p.service_name_norm,
+    category: toCategory(p.category),
     price_kzt: p.price_kzt,
     currency: 'KZT',
     duration_days: null,
@@ -130,7 +140,7 @@ export async function getClinicById(clinicId: string): Promise<MedService[]> {
 export async function getAutocomplete(query: string): Promise<string[]> {
   if (!query.trim()) return [];
   const rows = await fetchPrices(query);
-  const names = [...new Set(rows.map((s) => s.service_name_raw))];
+  const names = [...new Set(rows.map((s) => s.service_name_norm))];
   return names.slice(0, 8);
 }
 

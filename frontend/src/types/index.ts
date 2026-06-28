@@ -15,7 +15,6 @@ export interface MedService {
   lat: number;
   lng: number;
   service_id: string;
-  service_name_raw: string;
   service_name_norm: string;
   category: ServiceCategory;
   price_kzt: number;

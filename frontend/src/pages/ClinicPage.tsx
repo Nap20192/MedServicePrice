@@ -38,7 +38,7 @@ export default function ClinicPage() {
 
   const filtered = services.filter((s) => {
     if (tab !== 'all' && s.category !== tab) return false;
-    if (innerQuery && !s.service_name_norm.toLowerCase().includes(innerQuery.toLowerCase()) && !s.service_name_raw.toLowerCase().includes(innerQuery.toLowerCase())) return false;
+    if (innerQuery && !s.service_name_norm.toLowerCase().includes(innerQuery.toLowerCase())) return false;
     return true;
   });
 
@@ -225,9 +225,6 @@ export default function ClinicPage() {
                       <tr key={s.service_id} className="hover:bg-slate-50/60 transition-colors group">
                         <td className="px-4 py-3.5">
                           <p className="font-medium text-slate-800">{s.service_name_norm}</p>
-                          {s.service_name_raw !== s.service_name_norm && (
-                            <p className="text-xs text-slate-400 mt-0.5">«{s.service_name_raw}»</p>
-                          )}
                         </td>
                         <td className="px-4 py-3.5 hidden sm:table-cell">
                           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${categoryColors[s.category] || 'bg-slate-100 text-slate-600'}`}>

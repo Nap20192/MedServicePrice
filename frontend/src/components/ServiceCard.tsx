@@ -33,13 +33,25 @@ export default function ServiceCard({ service, showCity = false }: ServiceCardPr
                 {service.clinic_name.charAt(0)}
               </div>
               <div className="min-w-0">
-                <Link
-                  to={`/clinic/${service.clinic_id}`}
-                  className="font-semibold text-slate-800 hover:text-teal-600 transition-colors text-sm leading-snug truncate block"
-                  id={`clinic-link-${service.service_id}`}
-                >
-                  {service.clinic_name}
-                </Link>
+                {service.source_url ? (
+                  <a
+                    href={service.source_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-semibold text-slate-800 hover:text-teal-600 transition-colors text-sm leading-snug truncate block"
+                    id={`clinic-link-${service.service_id}`}
+                  >
+                    {service.clinic_name} ↗
+                  </a>
+                ) : (
+                  <Link
+                    to={`/clinic/${service.clinic_id}`}
+                    className="font-semibold text-slate-800 hover:text-teal-600 transition-colors text-sm leading-snug truncate block"
+                    id={`clinic-link-${service.service_id}`}
+                  >
+                    {service.clinic_name}
+                  </Link>
+                )}
                 <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${open ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
                     {open ? '● Открыто' : '● Закрыто'}
@@ -57,9 +69,6 @@ export default function ServiceCard({ service, showCity = false }: ServiceCardPr
             {/* Service name */}
             <div className="mb-2">
               <p className="font-medium text-slate-800 text-sm leading-snug">{service.service_name_norm}</p>
-              {service.service_name_raw !== service.service_name_norm && (
-                <p className="text-xs text-slate-400 mt-0.5 truncate">«{service.service_name_raw}»</p>
-              )}
             </div>
 
             {/* Tags row */}

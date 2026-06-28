@@ -45,7 +45,3 @@ type SchedulerUseCase interface {
 type PriceUseCase interface {
 	Search(ctx context.Context, query string, city string) ([]AggregatedPrice, error)
 }
-
-type ConsumerUseCase interface {
-	ProcessAdapterFetch(ctx context.Context, payload []byte) error
-}

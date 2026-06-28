@@ -25,7 +25,6 @@ type ClinicRepository interface {
 
 type PriceRepository interface {
 	SearchPrices(ctx context.Context, query string, city string) ([]AggregatedPrice, error)
-	UpsertParsedService(ctx context.Context, ps *ParsedService) error
 }
 
 type AdapterRepository interface {
