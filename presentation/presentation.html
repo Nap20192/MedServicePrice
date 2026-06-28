@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>MedServicePrice.kz</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f4f4f5;--white:#fff;--n50:#fafafa;--n200:#e4e4e7;
+  --n300:#d4d4d8;--n400:#a1a1aa;--n500:#71717a;--n600:#52525b;
+  --n700:#3f3f46;--ink:#0a0a0a;
+  --blue:#2563eb;--blue2:#1d4ed8;--blue3:#dbe6fe;--em:#10b981;
+  --W:1200px;--H:675px;
+}
+html,body{width:100%;height:100%;background:var(--bg);font-family:'Inter',system-ui,sans-serif;color:var(--ink);overflow:hidden;user-select:none;-webkit-font-smoothing:antialiased}
+#deck{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+.sw{position:absolute;width:var(--W);height:var(--H);transition:transform .55s cubic-bezier(.77,0,.18,1),opacity .55s ease;will-change:transform,opacity}
+.sw.active{transform:translateX(0);opacity:1;z-index:2}
+.sw.left{transform:translateX(-108%);opacity:0;z-index:1}
+.sw.right{transform:translateX(108%);opacity:0;z-index:1}
+.slide{width:100%;height:100%;background:var(--white);border:1px solid var(--n200);display:flex;flex-direction:column;overflow:hidden}
+.hdr{height:46px;border-bottom:1px solid var(--n200);display:flex;align-items:center;justify-content:space-between;padding:0 32px;flex-shrink:0}
+.logo{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;letter-spacing:-.2px}
+.lm{width:20px;height:20px;background:var(--blue);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:900}
+.logo em{color:var(--blue);font-style:normal}
+.slbl{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--n500);letter-spacing:.5px;text-transform:uppercase}
+.vl{width:1px;background:var(--n200);align-self:stretch;flex-shrink:0}
+.hl{height:1px;background:var(--n200);width:100%}
+.tag{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:500;letter-spacing:.3px;text-transform:uppercase;border:1px solid var(--n300);padding:3px 8px;color:var(--n600);display:inline-block}
+.tb{background:var(--blue3);border-color:#93c5fd;color:var(--blue2)}
+.tg{background:#d1fae5;border-color:#6ee7b7;color:#065f46}
+.sv{font-family:'JetBrains Mono',monospace;font-size:30px;font-weight:600;color:var(--ink);letter-spacing:-1px;line-height:1}
+.sl{font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--n500);margin-top:4px}
+.lbl{font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--n500)}
+.row{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--n200);font-size:13px;line-height:1.5;color:var(--n700)}
+.row:last-child{border-bottom:none}
+.rn{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--n400);flex-shrink:0;padding-top:2px;min-width:20px}
+.row b{color:var(--ink);font-weight:600}
+.eyebrow{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:var(--n500);margin-bottom:10px;display:flex;align-items:center;gap:7px}
+.edot{width:5px;height:5px;background:var(--em);border-radius:50%;flex-shrink:0}
+.cta{background:var(--blue);padding:18px 22px;color:#fff}
+.cta .big{font-size:22px;font-weight:900;letter-spacing:-.5px;line-height:1}
+.cta .sub{font-size:10px;opacity:.7;margin-top:5px;font-family:'JetBrains Mono',monospace}
+#nav{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;z-index:100;background:var(--white);border:1px solid var(--n200);padding:5px 12px}
+.nb{width:26px;height:26px;background:none;border:1px solid var(--n300);color:var(--n700);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.nb:hover{background:var(--ink);border-color:var(--ink);color:#fff}
+#cnt{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--n500);min-width:36px;text-align:center}
+.dots{display:flex;gap:5px;align-items:center}
+.dot{width:5px;height:5px;background:var(--n300);cursor:pointer;transition:all .25s}
+.dot.on{width:18px;background:var(--blue)}
+#hint{position:fixed;bottom:24px;right:22px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--n400)}
+</style>
+</head>
+<body>
+<div id="deck">
+
+<!-- SLIDE 1: COVER -->
+<div class="sw active" id="sw-0">
+<div class="slide">
+  <div class="hdr">
+    <div class="logo"><div class="lm">+</div>Med<em>Service</em>Price<em>.kz</em></div>
+    <div class="slbl">Хакатон 2025 · Кейс 1</div>
+  </div>
+  <div style="flex:1;display:grid;grid-template-columns:1fr 1px 300px;overflow:hidden">
+    <div style="padding:30px 32px;display:flex;flex-direction:column;justify-content:space-between">
+      <div>
+        <div class="eyebrow"><div class="edot"></div>Медицинские технологии · Казахстан</div>
+        <div style="font-size:64px;font-weight:900;letter-spacing:-4px;line-height:.92;margin-bottom:16px">
+          Med<br>Service<br><span style="color:var(--blue)">Price</span>
+        </div>
+        <p style="font-size:14px;color:var(--n600);line-height:1.65;max-width:460px;margin-bottom:18px">
+          Пациент ищет цену анализа и обходит <strong style="color:var(--ink)">20+ сайтов вручную</strong>.<br>
+        </p>
+        <div style="display:flex;flex-wrap:wrap;gap:5px">
+          <span class="tag tb">Автопарсинг</span>
+          <span class="tag tb">AI-нормализация</span>
+          <span class="tag tb">Карта клиник</span>
+          <span class="tag tb">История цен</span>
+          <span class="tag tb">Подписки</span>
+        </div>
+        <div style="margin-top:18px;display:flex;align-items:center;gap:16px;padding:14px 16px;border:1px solid var(--n200);background:var(--n50)">
+          <div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:700;color:var(--blue);letter-spacing:-1px;line-height:1">117</div>
+            <div class="lbl" style="margin-top:3px">Команда</div>
+          </div>
+          <div style="width:1px;height:40px;background:var(--n200)"></div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <div style="font-size:13px;font-weight:600;color:var(--ink)">Когай Николай</div>
+            <div style="font-size:13px;font-weight:600;color:var(--ink)">Арипжанов Закир</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="lbl" style="margin-bottom:7px">Источники данных</div>
+        <div style="display:flex;border:1px solid var(--n200)">
+          <div style="flex:1;border-right:1px solid var(--n200);padding:7px 11px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--n700)">invitro.kz</div>
+          <div style="flex:1;border-right:1px solid var(--n200);padding:7px 11px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--n700)">kdlolymp.kz</div>
+          <div style="flex:1;border-right:1px solid var(--n200);padding:7px 11px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--n700)">emirmed.kz</div>
+          <div style="flex:1;border-right:1px solid var(--n200);padding:7px 11px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--n700)">helix.kz</div>
+          <div style="flex:1;padding:7px 11px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--n400)">+ новые</div>
+        </div>
+      </div>
+    </div>
+    <div class="vl"></div>
+    <div style="display:grid;grid-template-rows:1fr 1px 1fr 1px 1fr 1px 1fr">
+      <div style="padding:18px 22px;display:flex;flex-direction:column;justify-content:center">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:34px;font-weight:600;color:#ef4444;letter-spacing:-2px;line-height:1">inf</div>
+        <div class="sl">минут поиска вручную</div>
+      </div>
+      <div class="hl"></div>
+      <div style="padding:18px 22px;display:flex;flex-direction:column;justify-content:center">
+        <div class="sv" style="color:var(--blue)">&lt; 3s</div>
+        <div class="sl">поиск в сервисе</div>
+      </div>
+      <div class="hl"></div>
+      <div style="padding:18px 22px;display:flex;flex-direction:column;justify-content:center">
+        <div class="sv">7+</div>
+        <div class="sl">источников клиник</div>
+      </div>
+      <div class="hl"></div>
+      <div style="padding:18px 22px;display:flex;flex-direction:column;justify-content:center">
+        <div class="sv">5+</div>
+        <div class="sl">городов Казахстана</div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- SLIDE 2: ARCHITECTURE + CRAWLER -->
+<div class="sw right" id="sw-1">
+<div class="slide">
+  <div class="hdr">
+    <div class="logo"><div class="lm">+</div>Med<em>Service</em>Price<em>.kz</em></div>
+    <div class="slbl">Слайд 2 · Как работает</div>
+  </div>
+  <div style="flex:1;display:grid;grid-template-columns:1fr 1px 330px 1px 260px;overflow:hidden">
+    <div style="padding:20px 24px;background:var(--n50);display:flex;flex-direction:column;overflow:hidden">
+      <div class="lbl" style="margin-bottom:10px">Архитектура системы</div>
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden">
+        <img src="project_architecture.png" alt="Architecture" style="max-width:100%;max-height:100%;object-fit:contain;border:1px solid var(--n200)"/>
+      </div>
+    </div>
+    <div class="vl"></div>
+    <div style="padding:22px 24px;display:flex;flex-direction:column;overflow:hidden">
+      <div class="lbl" style="margin-bottom:14px">Стек</div>
+      <div class="row"><div class="rn">01</div><div><b>Python AI-Crawler</b> — автоматически обходит сайты клиник, извлекает прайсы</div></div>
+      <div class="row"><div class="rn">02</div><div><b>RabbitMQ</b> — шина событий между сервисами, отказоустойчивые очереди</div></div>
+      <div class="row"><div class="rn">03</div><div><b>Go Backend</b> — нормализация названий, REST API, планировщик задач</div></div>
+      <div class="row"><div class="rn">04</div><div><b>PostgreSQL</b> — хранение цен, история изменений, полнотекстовый поиск</div></div>
+      <div class="row" style="border-bottom:none"><div class="rn">05</div><div><b>React + Leaflet</b> — поиск, карта, сравнение клиник, история цен</div></div>
+      <div style="margin-top:16px">
+        <div class="lbl" style="margin-bottom:8px">Нормализация</div>
+        <div style="background:var(--n50);border:1px solid var(--n200);padding:10px 12px;font-size:12px;line-height:1.7">
+          <span style="color:var(--n500)">"ОАК"</span> · <span style="color:var(--n500)">"CBC"</span> · <span style="color:var(--n500)">"Клинический анализ"</span>
+          <div style="font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--n400);margin:3px 0">нечеткое совпадение + LLM</div>
+          <strong style="color:var(--blue)">"Общий анализ крови (ОАК)"</strong>
+        </div>
+      </div>
+    </div>
+    <div class="vl"></div>
+    <div style="padding:20px 20px;background:var(--n50);display:flex;flex-direction:column;overflow:hidden">
+      <div class="lbl" style="margin-bottom:10px">AI Crawler</div>
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden">
+        <img src="ai_crawler.png" alt="AI Crawler" style="max-width:100%;max-height:100%;object-fit:contain;border:1px solid var(--n200)"/>
+      </div>
+      <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:4px">
+        <span class="tag tg">JSON-LD</span>
+        <span class="tag">CSS-схема</span>
+        <span class="tag">DOM/Regex</span>
+        <span class="tag tb">LLM</span>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- SLIDE 3: SUMMARY -->
+<div class="sw right" id="sw-2">
+<div class="slide">
+  <div class="hdr">
+    <div class="logo"><div class="lm">+</div>Med<em>Service</em>Price<em>.kz</em></div>
+    <div class="slbl">Слайд 3 · Проект</div>
+  </div>
+  <div style="flex:1;display:grid;grid-template-columns:1fr 1px 1fr;overflow:hidden">
+    <div style="padding:26px 30px;display:flex;flex-direction:column">
+      <div class="lbl" style="margin-bottom:14px">Что реализовано</div>
+      <div class="row"><div class="rn">01</div><div><b>Автопарсинг</b> — сбор цен с 7+ источников по расписанию, без ручного труда</div></div>
+      <div class="row"><div class="rn">02</div><div><b>Нормализация</b> — разные названия одной услуги приводятся к единому справочнику</div></div>
+      <div class="row"><div class="rn">03</div><div><b>Поиск и фильтры</b> — по городу, категории и цене; автодополнение по справочнику</div></div>
+      <div class="row"><div class="rn">04</div><div><b>Карта клиник</b> — интерактивная Leaflet-карта с маршрутом до клиники</div></div>
+      <div class="row"><div class="rn">05</div><div><b>Сравнение и история</b> — несколько клиник рядом, спарклайн изменения цены</div></div>
+      <div class="row" style="border-bottom:none"><div class="rn">06</div><div><b>Подписки</b> — уведомление, когда цена на выбранную услугу снижается</div></div>
+      <div style="flex:1"></div>
+      <div class="cta">
+        <div class="big">MedServicePrice.kz</div>
+        <div class="sub">Казахстан · 2026</div>
+      </div>
+    </div>
+    <div class="vl"></div>
+    <div style="padding:26px 30px;display:flex;flex-direction:column;gap:20px">
+      <div>
+        <div class="lbl" style="margin-bottom:12px">Ключевые цифры</div>
+        <div style="display:grid;grid-template-columns:1fr 1px 1fr;border:1px solid var(--n200)">
+          <div style="padding:14px 16px"><div class="sv">7+</div><div class="sl">источников данных</div></div>
+          <div class="vl"></div>
+          <div style="padding:14px 16px"><div class="sv">5+</div><div class="sl">городов Казахстана</div></div>
+          <div style="grid-column:1/-1;height:1px;background:var(--n200)"></div>
+          <div style="padding:14px 16px"><div class="sv" style="color:var(--blue)">50+</div><div class="sl">услуг в справочнике</div></div>
+          <div class="vl"></div>
+          <div style="padding:14px 16px"><div class="sv">30д</div><div class="sl">гарантия свежести цен</div></div>
+        </div>
+      </div>
+      <div>
+        <div class="lbl" style="margin-bottom:10px">Технологии</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
+          <div style="border:1px solid var(--n200);padding:9px 12px"><div style="font-size:11px;font-weight:600;margin-bottom:2px">Python</div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--n500)">crawl4ai · APScheduler</div></div>
+          <div style="border:1px solid var(--n200);padding:9px 12px"><div style="font-size:11px;font-weight:600;margin-bottom:2px">Go</div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--n500)">Chi · pgx · amqp091</div></div>
+          <div style="border:1px solid var(--n200);padding:9px 12px"><div style="font-size:11px;font-weight:600;margin-bottom:2px">PostgreSQL</div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--n500)">pg_trgm · FTS · triggers</div></div>
+          <div style="border:1px solid var(--n200);padding:9px 12px"><div style="font-size:11px;font-weight:600;margin-bottom:2px">React + Vite</div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--n500)">TypeScript · Leaflet</div></div>
+          <div style="border:1px solid var(--n200);padding:9px 12px"><div style="font-size:11px;font-weight:600;margin-bottom:2px">RabbitMQ</div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--n500)">Topic exchange · DLX</div></div>
+          <div style="border:1px solid var(--n200);padding:9px 12px"><div style="font-size:11px;font-weight:600;margin-bottom:2px">Docker</div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--n500)">Compose · .env configs</div></div>
+        </div>
+      </div>
+      <div>
+        <div class="lbl" style="margin-bottom:8px">Категории услуг</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          <span class="tag">Лаборатория</span>
+          <span class="tag">Приём врача</span>
+          <span class="tag">Диагностика</span>
+          <span class="tag">Процедура</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+</div>
+
+<div id="nav">
+  <button class="nb" id="bp">&#8249;</button>
+  <div class="dots" id="dots"></div>
+  <span id="cnt">1 / 3</span>
+  <button class="nb" id="bn">&#8250;</button>
+</div>
+<div id="hint">arrow keys / swipe</div>
+
+<script>
+const N=3;let cur=0;
+const ws=Array.from({length:N},(_,i)=>document.getElementById('sw-'+i));
+const cnt=document.getElementById('cnt');
+const dotsEl=document.getElementById('dots');
+for(let i=0;i<N;i++){const d=document.createElement('div');d.className='dot'+(i===0?' on':'');d.onclick=()=>go(i);dotsEl.appendChild(d)}
+function go(to){
+  if(to===cur||to<0||to>=N)return;
+  ws[cur].className='sw '+(to>cur?'left':'right');
+  cur=to;ws[cur].className='sw active';
+  cnt.textContent=(cur+1)+' / '+N;
+  dotsEl.querySelectorAll('.dot').forEach((d,i)=>d.classList.toggle('on',i===cur));
+}
+document.getElementById('bp').onclick=()=>go(cur-1);
+document.getElementById('bn').onclick=()=>go(cur+1);
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight'||e.key===' ')go(cur+1);
+  if(e.key==='ArrowLeft')go(cur-1);
+});
+let tx=null;
+document.addEventListener('touchstart',e=>{tx=e.touches[0].clientX});
+document.addEventListener('touchend',e=>{
+  if(tx===null)return;
+  const dx=e.changedTouches[0].clientX-tx;
+  if(dx<-40)go(cur+1);if(dx>40)go(cur-1);tx=null;
+});
+function scale(){
+  const sc=Math.min(window.innerWidth/1280,window.innerHeight/760);
+  document.getElementById('deck').style.transform='scale('+sc+')';
+  document.getElementById('deck').style.transformOrigin='center center';
+}
+scale();window.addEventListener('resize',scale);
+</script>
+</body>
+</html>
