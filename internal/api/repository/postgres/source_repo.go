@@ -146,8 +146,8 @@ func NewClinicRepository(db *database.DB) domain.ClinicRepository {
 
 func (r *clinicRepo) CreateClinic(ctx context.Context, clinic *domain.Clinic) error {
 	query := `INSERT INTO clinics
-		(id, name, city, address, phone, working_hours, url, google_place_id, lat, lng, rating, reviews_count)
-		VALUES (:id, :name, :city, :address, :phone, :working_hours, :url, :google_place_id, :lat, :lng, :rating, :reviews_count)`
+		(id, name, source_id, city, address, phone, working_hours, url, google_place_id, lat, lng, rating, reviews_count)
+		VALUES (:id, :name, :source_id, :city, :address, :phone, :working_hours, :url, :google_place_id, :lat, :lng, :rating, :reviews_count)`
 	_, err := r.db.NamedExecContext(ctx, query, clinic)
 	return err
 }

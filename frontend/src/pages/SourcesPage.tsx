@@ -1,5 +1,6 @@
 import React, { FormEvent, useEffect, useState } from 'react';
 import {
+  addBranches,
   attachSourceToClinic,
   createClinic,
   createSource,
@@ -57,6 +58,12 @@ export default function SourcesPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Bulk branches (clinic network)
+  const [branchSourceID, setBranchSourceID] = useState('');
+  const [branchName, setBranchName] = useState('');
+  const [branchLines, setBranchLines] = useState('');
+  const [savingBranches, setSavingBranches] = useState(false);
 
   const refresh = async () => {
     const [sourceData, clinicData, scheduler] = await Promise.all([
@@ -160,6 +167,35 @@ export default function SourcesPage() {
       setError(err instanceof Error ? err.message : 'Не удалось импортировать из Google Maps');
     } finally {
       setBusyId(null);
+    }
+  };
+
+  // Each line: "Город; Адрес" → one branch clinic. All share branchName + the source.
+  const submitBranches = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!branchSourceID || !branchName.trim()) return;
+    const branches = branchLines
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const [city, ...rest] = line.split(/[;,\t]/).map((s) => s.trim());
+        return { city: city || undefined, address: rest.join(', ') || undefined };
+      });
+    if (branches.length === 0) return;
+    setSavingBranches(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const created = await addBranches(branchSourceID, branchName.trim(), branches);
+      setMessage(`Создано филиалов: ${created.length} (сеть «${branchName.trim()}»)`);
+      setBranchLines('');
+      setBranchName('');
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось создать филиалы');
+    } finally {
+      setSavingBranches(false);
     }
   };
 
@@ -286,6 +322,37 @@ export default function SourcesPage() {
             </button>
           </form>
         </div>
+
+        {/* Bulk branches: a clinic network sharing one source's service pool */}
+        <form onSubmit={submitBranches} className="bg-white border border-slate-100 rounded-xl shadow-sm p-5 space-y-4 mb-6">
+          <div>
+            <h2 className="font-semibold text-slate-800">Филиалы сети</h2>
+            <p className="text-sm text-slate-500 mt-1">Много клиник с одним именем, общий пул услуг источника. Цены филиала — по его городу.</p>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <select value={branchSourceID} onChange={(e) => setBranchSourceID(e.target.value)} required className="border border-slate-200 rounded-lg px-3 py-2 text-sm">
+              <option value="">Источник сети…</option>
+              {sources.map((s) => (
+                <option key={s.id} value={s.id}>{s.url}</option>
+              ))}
+            </select>
+            <input value={branchName} onChange={(e) => setBranchName(e.target.value)} required placeholder="Имя сети (для всех филиалов)" className="border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <textarea
+            value={branchLines}
+            onChange={(e) => setBranchLines(e.target.value)}
+            required
+            rows={4}
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+            placeholder={'Алматы; ул. Абая 1\nАстана; пр. Кабанбай 2\nШымкент; ул. Тауке хана 5'}
+          />
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-slate-400">По строке на филиал: «Город; Адрес».</p>
+            <button type="submit" disabled={savingBranches} className="bg-teal-500 hover:bg-teal-600 disabled:bg-slate-300 text-white text-sm font-medium rounded-lg px-5 py-2">
+              {savingBranches ? 'Создание...' : 'Создать филиалы'}
+            </button>
+          </div>
+        </form>
 
         <section className="bg-white border border-slate-100 rounded-xl shadow-sm p-5 mb-6">
           <div className="flex flex-col lg:flex-row lg:items-end gap-4 justify-between mb-4">

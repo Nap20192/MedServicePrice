@@ -239,6 +239,25 @@ export async function rebuildSourceAdapter(sourceId: string): Promise<SourceComm
   });
 }
 
+export interface BranchInput {
+  city?: string;
+  address?: string;
+  phone?: string;
+  working_hours?: string;
+}
+
+// Create many branch clinics under one source/network — same name, shared service pool.
+export async function addBranches(
+  sourceId: string,
+  name: string,
+  branches: BranchInput[],
+): Promise<ClinicRecord[]> {
+  return apiJson<ClinicRecord[]>(`/sources/${sourceId}/branches`, {
+    method: 'POST',
+    body: JSON.stringify({ name, branches }),
+  });
+}
+
 // ── БЭКЕНД-РЕЖИМ (раскомментировать при интеграции) ──────────
 //
 // import axios from 'axios';

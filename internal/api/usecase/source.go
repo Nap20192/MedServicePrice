@@ -87,6 +87,28 @@ func (uc *sourceUC) ListSources(ctx context.Context) ([]domain.SourceDetails, er
 	return uc.sourceRepo.ListSources(ctx)
 }
 
+func (uc *sourceUC) AddBranches(ctx context.Context, sourceID uuid.UUID, name string, branches []domain.Clinic) ([]domain.Clinic, error) {
+	if name == "" {
+		return nil, fmt.Errorf("network name is required")
+	}
+	if len(branches) == 0 {
+		return nil, fmt.Errorf("at least one branch is required")
+	}
+	out := make([]domain.Clinic, 0, len(branches))
+	for i := range branches {
+		b := branches[i]
+		b.ID = uuid.New()
+		b.Name = name
+		sid := sourceID
+		b.SourceID = &sid
+		if err := uc.clinicRepo.CreateClinic(ctx, &b); err != nil {
+			return out, fmt.Errorf("create branch %d: %w", i+1, err)
+		}
+		out = append(out, b)
+	}
+	return out, nil
+}
+
 func (uc *sourceUC) CreateClinic(ctx context.Context, input domain.CreateClinicInput) (*domain.Clinic, error) {
 	if input.Name == "" {
 		return nil, fmt.Errorf("clinic name is required")

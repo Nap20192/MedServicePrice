@@ -7,58 +7,66 @@ export default {
   theme: {
     extend: {
       colors: {
-        primary: {
-          50:  '#edfafa',
-          100: '#d5f5f6',
-          200: '#afeaed',
-          300: '#7cd9e0',
-          400: '#40bdc8',
-          500: '#20a2b0',
-          600: '#0e8595',
-          700: '#136d7a',
-          800: '#175a65',
-          900: '#164b55',
-          950: '#0a2e37',
+        // Single restrained accent (technical blue). `teal` is remapped to it so
+        // existing teal-* classes adopt the new accent without per-file rewrites.
+        accent: {
+          50:  '#eff4ff',
+          100: '#dbe6fe',
+          500: '#2563eb',
+          600: '#1d4ed8',
+          700: '#1e40af',
         },
         teal: {
-          400: '#2dd4bf',
-          500: '#14b8a6',
-          600: '#0d9488',
+          50:  '#eff4ff',
+          100: '#dbe6fe',
+          200: '#c7d8fd',
+          300: '#9bb8fb',
+          400: '#3b82f6',
+          500: '#2563eb',
+          600: '#1d4ed8',
+          700: '#1e40af',
         },
-        slate: {
-          850: '#1a2535',
-        }
+        // `primary` remapped to neutral ink.
+        primary: {
+          50:  '#fafafa',
+          100: '#f4f4f5',
+          200: '#e4e4e7',
+          300: '#d4d4d8',
+          400: '#a1a1aa',
+          500: '#71717a',
+          600: '#52525b',
+          700: '#3f3f46',
+          800: '#27272a',
+          900: '#18181b',
+          950: '#09090b',
+        },
+        ink: '#0a0a0a',
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
-      },
-      backgroundImage: {
-        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
+        mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },
       animation: {
-        'fade-in': 'fadeIn 0.3s ease-out',
-        'slide-up': 'slideUp 0.3s ease-out',
-        'pulse-soft': 'pulseSoft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'shimmer': 'shimmer 1.5s infinite',
+        'fade-in': 'fadeIn 0.2s ease-out',
       },
       keyframes: {
         fadeIn: {
-          '0%': { opacity: '0', transform: 'translateY(8px)' },
-          '100%': { opacity: '1', transform: 'translateY(0)' },
-        },
-        slideUp: {
-          '0%': { opacity: '0', transform: 'translateY(20px)' },
-          '100%': { opacity: '1', transform: 'translateY(0)' },
-        },
-        pulseSoft: {
-          '0%, 100%': { opacity: '1' },
-          '50%': { opacity: '0.6' },
-        },
-        shimmer: {
-          '0%': { backgroundPosition: '-200% 0' },
-          '100%': { backgroundPosition: '200% 0' },
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
         },
       },
+    },
+    // Sharp everywhere; only round dots/avatars keep `full`.
+    borderRadius: {
+      none: '0',
+      sm: '0',
+      DEFAULT: '0',
+      md: '0',
+      lg: '0',
+      xl: '0',
+      '2xl': '0',
+      '3xl': '0',
+      full: '9999px',
     },
   },
   plugins: [],

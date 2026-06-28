@@ -206,6 +206,33 @@ func (h *sourceHandler) TriggerFetch(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
+type addBranchesRequest struct {
+	Name     string          `json:"name"`
+	Branches []domain.Clinic `json:"branches"`
+}
+
+func (h *sourceHandler) AddBranches(w http.ResponseWriter, r *http.Request) {
+	sourceID, err := uuid.Parse(chi.URLParam(r, "sourceID"))
+	if err != nil {
+		http.Error(w, "invalid source id", http.StatusBadRequest)
+		return
+	}
+	var req addBranchesRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	clinics, err := h.usecase.AddBranches(r.Context(), sourceID, req.Name, req.Branches)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(clinics)
+}
+
 func (h *sourceHandler) RebuildAdapter(w http.ResponseWriter, r *http.Request) {
 	sourceID, err := uuid.Parse(chi.URLParam(r, "sourceID"))
 	if err != nil {

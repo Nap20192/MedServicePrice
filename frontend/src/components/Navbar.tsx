@@ -1,88 +1,79 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useComparison } from '../context/ComparisonContext';
+
+const NAV = [
+  { to: '/', label: 'Главная' },
+  { to: '/search', label: 'Поиск' },
+  { to: '/sources', label: 'Источники' },
+];
 
 export default function Navbar() {
   const { items, setIsOpen } = useComparison();
-  const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
 
+  const linkClass = (to: string) =>
+    `text-sm transition-colors ${
+      pathname === to ? 'text-neutral-900 font-semibold' : 'text-neutral-500 hover:text-neutral-900'
+    }`;
+
   return (
-    <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-100 shadow-sm">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          {/* Logo */}
-          <Link to="/" className="flex items-center gap-2 group">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-teal-400 to-primary-600 flex items-center justify-center shadow-md group-hover:shadow-teal-300 transition-shadow">
-              <span className="text-white text-lg font-bold">M</span>
+    <header className="sticky top-0 z-50 bg-neutral-50/90 backdrop-blur border-b border-neutral-200">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+        <div className="flex items-center justify-between h-14">
+          <Link to="/" className="flex items-center gap-2.5">
+            <div className="w-7 h-7 bg-neutral-900 flex items-center justify-center">
+              <span className="text-white font-mono font-bold text-sm">M</span>
             </div>
-            <div className="hidden sm:block">
-              <span className="font-bold text-slate-800 text-lg leading-none">MedService</span>
-              <span className="font-bold text-teal-500 text-lg leading-none">Price.kz</span>
-            </div>
+            <span className="font-mono font-semibold text-neutral-900 text-sm tracking-tight">
+              MedServicePrice<span className="text-neutral-400">.kz</span>
+            </span>
           </Link>
 
-          {/* Desktop nav */}
-          <nav className="hidden md:flex items-center gap-6">
-            <Link to="/" className="text-slate-500 hover:text-teal-600 font-medium transition-colors text-sm">
-              Главная
-            </Link>
-            <Link to="/search" className="text-slate-500 hover:text-teal-600 font-medium transition-colors text-sm">
-              Поиск услуг
-            </Link>
-            <Link to="/sources" className="text-slate-500 hover:text-teal-600 font-medium transition-colors text-sm">
-              Источники
-            </Link>
-            <button
-              onClick={() => navigate('/search?category=лаборатория')}
-              className="text-slate-500 hover:text-teal-600 font-medium transition-colors text-sm"
-            >
-              Анализы
-            </button>
+          <nav className="hidden md:flex items-center gap-7">
+            {NAV.map((n) => (
+              <Link key={n.to} to={n.to} className={linkClass(n.to)}>{n.label}</Link>
+            ))}
           </nav>
 
-          {/* Right side */}
-          <div className="flex items-center gap-3">
-            {/* Comparison badge */}
+          <div className="flex items-center gap-2">
             {items.length > 0 && (
               <button
                 onClick={() => setIsOpen(true)}
-                className="relative flex items-center gap-2 bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-700 px-3 py-1.5 rounded-lg text-sm font-medium transition-all animate-fade-in"
+                className="flex items-center gap-2 border border-neutral-900 bg-neutral-900 text-white px-3 py-1.5 text-xs font-medium hover:bg-neutral-700 transition-colors"
                 id="nav-comparison-btn"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-                <span>Сравнить</span>
-                <span className="absolute -top-1.5 -right-1.5 bg-teal-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
-                  {items.length}
-                </span>
+                Сравнение
+                <span className="font-mono bg-white text-neutral-900 px-1.5 leading-5 text-[11px]">{items.length}</span>
               </button>
             )}
-
-            {/* Mobile menu toggle */}
             <button
               onClick={() => setMenuOpen(!menuOpen)}
-              className="md:hidden p-2 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors"
+              className="md:hidden p-2 text-neutral-600 hover:bg-neutral-200 transition-colors"
               id="mobile-menu-toggle"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 {menuOpen
-                  ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                }
+                  ? <path strokeLinecap="square" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  : <path strokeLinecap="square" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />}
               </svg>
             </button>
           </div>
         </div>
 
-        {/* Mobile menu */}
         {menuOpen && (
-          <div className="md:hidden border-t border-slate-100 py-3 space-y-1 animate-fade-in">
-            <Link to="/" onClick={() => setMenuOpen(false)} className="block px-3 py-2 text-slate-600 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors text-sm font-medium">Главная</Link>
-            <Link to="/search" onClick={() => setMenuOpen(false)} className="block px-3 py-2 text-slate-600 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors text-sm font-medium">Поиск услуг</Link>
-            <Link to="/sources" onClick={() => setMenuOpen(false)} className="block px-3 py-2 text-slate-600 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors text-sm font-medium">Источники</Link>
-            <button onClick={() => { navigate('/search?category=лаборатория'); setMenuOpen(false); }} className="block w-full text-left px-3 py-2 text-slate-600 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors text-sm font-medium">Анализы</button>
+          <div className="md:hidden border-t border-neutral-200 py-2 animate-fade-in">
+            {NAV.map((n) => (
+              <Link
+                key={n.to}
+                to={n.to}
+                onClick={() => setMenuOpen(false)}
+                className="block px-2 py-2.5 text-sm text-neutral-700 hover:bg-neutral-200 transition-colors"
+              >
+                {n.label}
+              </Link>
+            ))}
           </div>
         )}
       </div>

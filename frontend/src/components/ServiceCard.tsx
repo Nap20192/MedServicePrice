@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { MedService } from '../types';
-import { formatPrice, formatParsedAt, isPriceStale, categoryColors } from '../utils/format';
+import { formatPrice, formatParsedAt, isPriceStale, categoryColors, categoryDot } from '../utils/format';
 import { useComparison } from '../context/ComparisonContext';
 
 interface ServiceCardProps {
@@ -21,105 +21,77 @@ export default function ServiceCard({ service, showCity = false }: ServiceCardPr
   };
 
   return (
-    <div className={`bg-white rounded-2xl border transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 group ${inComp ? 'border-teal-300 shadow-teal-100 shadow-md' : 'border-slate-100 shadow-sm'}`}>
-      <div className="p-5">
-        <div className="flex items-start gap-4">
-          {/* Clinic info left */}
-          <div className="flex-1 min-w-0">
-            {/* Clinic name */}
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-100 to-teal-100 flex items-center justify-center shrink-0 text-lg font-bold text-teal-600">
-                {service.clinic_name.charAt(0)}
-              </div>
-              <div className="min-w-0">
-                {service.source_url ? (
-                  <a
-                    href={service.source_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-semibold text-slate-800 hover:text-teal-600 transition-colors text-sm leading-snug truncate block"
-                    id={`clinic-link-${service.service_id}`}
-                  >
-                    {service.clinic_name} ↗
-                  </a>
-                ) : (
-                  <Link
-                    to={`/clinic/${service.clinic_id}`}
-                    className="font-semibold text-slate-800 hover:text-teal-600 transition-colors text-sm leading-snug truncate block"
-                    id={`clinic-link-${service.service_id}`}
-                  >
-                    {service.clinic_name}
-                  </Link>
-                )}
-                {showCity && service.city && (
-                  <div className="mt-0.5">
-                    <span className="text-xs text-slate-400">{service.city}</span>
-                  </div>
-                )}
-              </div>
-            </div>
+    <div className={`group border bg-white transition-colors ${inComp ? 'border-neutral-900' : 'border-neutral-200 hover:border-neutral-400'}`}>
+      <div className="flex items-stretch">
+        {/* Left: service + clinic + meta */}
+        <div className="flex-1 min-w-0 p-4">
+          {/* Service name + category */}
+          <div className="flex items-start gap-2 mb-2">
+            <p className="font-medium text-neutral-900 leading-snug">{service.service_name_norm}</p>
+          </div>
 
-            {/* Service name */}
-            <div className="mb-2">
-              <p className="font-medium text-slate-800 text-sm leading-snug">{service.service_name_norm}</p>
-            </div>
-
-            {/* Category */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${categoryColors[service.category] || 'bg-slate-100 text-slate-600'}`}>
-                {service.category}
-              </span>
-            </div>
-
-            {/* Address */}
-            {service.address && (
-            <p className="text-xs text-slate-400 mt-2 truncate">
-              <svg className="w-3 h-3 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              {service.address}
-            </p>
+          <div className="flex items-center gap-2 flex-wrap mb-3">
+            <span className={`inline-flex items-center gap-1.5 border px-2 py-0.5 text-[11px] font-medium ${categoryColors[service.category] || 'border-neutral-300 text-neutral-700'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${categoryDot[service.category] || 'bg-neutral-400'}`} />
+              {service.category}
+            </span>
+            {service.duration_days !== null && (
+              <span className="label">срок {service.duration_days} дн.</span>
             )}
           </div>
 
-          {/* Price right */}
-          <div className="text-right shrink-0 flex flex-col items-end gap-2">
-            <div>
-              <p className="text-2xl font-bold text-slate-900 leading-none">{formatPrice(service.price_kzt)}</p>
-              <div className={`flex items-center gap-1 mt-1 justify-end ${stale ? 'text-amber-500' : 'text-slate-400'}`}>
-                {stale && (
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                )}
-                <span className="text-xs">{formatParsedAt(service.parsed_at)}</span>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex flex-col gap-1.5 w-full">
+          {/* Clinic */}
+          <div className="flex items-baseline gap-2 flex-wrap">
+            {service.source_url ? (
               <a
                 href={service.source_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs bg-teal-500 hover:bg-teal-600 text-white px-3 py-1.5 rounded-lg transition-colors text-center font-medium"
+                className="text-sm font-medium text-neutral-900 underline decoration-neutral-300 hover:decoration-neutral-900 underline-offset-2"
+                id={`clinic-link-${service.service_id}`}
+              >
+                {service.clinic_name} ↗
+              </a>
+            ) : (
+              <Link to={`/clinic/${service.clinic_id}`} className="text-sm font-medium text-neutral-900 hover:underline">
+                {service.clinic_name}
+              </Link>
+            )}
+            {showCity && service.city && <span className="label">{service.city}</span>}
+          </div>
+          {service.address && (
+            <p className="text-xs text-neutral-500 mt-1 truncate">{service.address}</p>
+          )}
+        </div>
+
+        {/* Right: price + freshness + actions */}
+        <div className="w-44 shrink-0 border-l border-neutral-200 p-4 flex flex-col justify-between">
+          <div className="text-right">
+            <p className="font-mono text-xl font-semibold text-neutral-900 leading-none">{formatPrice(service.price_kzt)}</p>
+            <p className={`text-[11px] mt-1.5 font-mono ${stale ? 'text-amber-600' : 'text-neutral-400'}`}>
+              {stale && '⚠ '}{formatParsedAt(service.parsed_at)}
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-px mt-3">
+            {service.source_url && (
+              <a
+                href={service.source_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-center text-xs border border-neutral-900 bg-neutral-900 text-white py-1.5 hover:bg-neutral-700 transition-colors"
                 id={`source-link-${service.service_id}`}
               >
-                На сайт клиники ↗
+                На сайт ↗
               </a>
-              <button
-                onClick={handleCompare}
-                className={`text-xs px-3 py-1.5 rounded-lg transition-all font-medium border ${
-                  inComp
-                    ? 'bg-teal-500 text-white border-teal-500 hover:bg-teal-600'
-                    : 'bg-white text-slate-600 border-slate-200 hover:border-teal-300 hover:text-teal-600'
-                }`}
-                id={`compare-btn-${service.service_id}`}
-              >
-                {inComp ? '✓ Добавлено' : '+ Сравнить'}
-              </button>
-            </div>
+            )}
+            <button
+              onClick={handleCompare}
+              className={`text-xs py-1.5 border transition-colors ${inComp ? 'border-neutral-900 bg-neutral-100 text-neutral-900' : 'border-neutral-300 text-neutral-600 hover:border-neutral-900'}`}
+              id={`compare-btn-${service.service_id}`}
+            >
+              {inComp ? '✓ В сравнении' : '+ Сравнить'}
+            </button>
           </div>
         </div>
       </div>

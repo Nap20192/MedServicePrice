@@ -108,6 +108,9 @@ services:
       LLM_TIMEOUT_S: ${LLM_TIMEOUT_S}
       NORMALIZE_SWEEP_INTERVAL_S: ${NORMALIZE_SWEEP_INTERVAL_S}
       NORMALIZE_SWEEP_LIMIT: ${NORMALIZE_SWEEP_LIMIT}
+    # Reach the host's Ollama (http://host.docker.internal:11434) from the container.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   frontend:
     build:

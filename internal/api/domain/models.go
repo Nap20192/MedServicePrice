@@ -7,9 +7,10 @@ import (
 )
 
 type Clinic struct {
-	ID            uuid.UUID `json:"id" db:"id"`
-	Name          string    `json:"name" db:"name"`
-	City          *string   `json:"city,omitempty" db:"city"`
+	ID            uuid.UUID  `json:"id" db:"id"`
+	Name          string     `json:"name" db:"name"`
+	SourceID      *uuid.UUID `json:"source_id,omitempty" db:"source_id"`
+	City          *string    `json:"city,omitempty" db:"city"`
 	Address       *string   `json:"address,omitempty" db:"address"`
 	Phone         *string   `json:"phone,omitempty" db:"phone"`
 	WorkingHours  *string   `json:"working_hours,omitempty" db:"working_hours"`

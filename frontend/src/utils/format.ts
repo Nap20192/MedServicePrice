@@ -19,12 +19,12 @@ export function formatParsedAt(iso: string): string {
   return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
 }
 
-// Стала ли цена "старой" (> 14 дней)?
+// ТЗ: данные старше 30 дней не считаются актуальными.
 export function isPriceStale(iso: string): boolean {
   const date = new Date(iso);
   const now = new Date();
   const diffDays = (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24);
-  return diffDays > 14;
+  return diffDays > 30;
 }
 
 // Открыта ли клиника прямо сейчас?
@@ -40,7 +40,6 @@ export function isOpenNow(workingHours: string): boolean {
   return current >= open && current <= close;
 }
 
-// Иконки категорий
 export const categoryIcons: Record<string, string> = {
   'лаборатория': '🧪',
   'диагностика': '🔬',
@@ -48,9 +47,18 @@ export const categoryIcons: Record<string, string> = {
   'процедура': '💉',
 };
 
+// Strict: neutral tag chip, sharp 1px border.
 export const categoryColors: Record<string, string> = {
-  'лаборатория': 'bg-blue-100 text-blue-700',
-  'диагностика': 'bg-purple-100 text-purple-700',
-  'приём врача': 'bg-green-100 text-green-700',
-  'процедура': 'bg-orange-100 text-orange-700',
+  'лаборатория': 'border-neutral-300 text-neutral-700 bg-white',
+  'диагностика': 'border-neutral-300 text-neutral-700 bg-white',
+  'приём врача': 'border-neutral-300 text-neutral-700 bg-white',
+  'процедура': 'border-neutral-300 text-neutral-700 bg-white',
+};
+
+// One small accent dot per category — the only color, for scannability.
+export const categoryDot: Record<string, string> = {
+  'лаборатория': 'bg-blue-500',
+  'диагностика': 'bg-violet-500',
+  'приём врача': 'bg-emerald-500',
+  'процедура': 'bg-amber-500',
 };

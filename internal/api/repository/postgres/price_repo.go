@@ -59,17 +59,25 @@ func (r *priceRepo) SearchPrices(ctx context.Context, p domain.PriceSearch) ([]d
 		argIdx++
 	}
 
+	// Network model: branch clinics share a source (clinics.source_id, M:1). An offer
+	// (source + city) belongs to the source's branches in that city. LEFT JOIN so a
+	// source with no registered branch still shows (clinic falls back to the source).
+	// DISTINCT ON (branch-or-source, service): one cheapest row per branch+service.
 	dedup := `
-		SELECT DISTINCT ON (c.id, sc.id)
-			o.id AS price_id, c.id AS clinic_id, c.name AS clinic_name, c.url AS clinic_url,
+		SELECT DISTINCT ON (COALESCE(c.id, s.id), sc.id)
+			o.id AS price_id,
+			COALESCE(c.id, s.id) AS clinic_id,
+			COALESCE(c.name, s.url) AS clinic_name,
+			COALESCE(c.url, s.url) AS clinic_url,
 			o.city, c.address, sc.name_norm AS service_name_norm, sc.category,
 			o.price_kzt, o.parsed_at
 		FROM service_offers o
 		JOIN sources s ON o.source_id = s.id
-		JOIN clinics c ON s.clinic_id = c.id
+		LEFT JOIN clinics c ON c.source_id = s.id
+			AND (c.city IS NULL OR o.city IS NULL OR c.city = o.city::text)
 		JOIN services_catalog sc ON o.service_catalog_id = sc.id
 		` + where + `
-		ORDER BY c.id, sc.id, o.price_kzt ASC`
+		ORDER BY COALESCE(c.id, s.id), sc.id, o.price_kzt ASC`
 
 	var total int
 	if err := r.db.GetContext(ctx, &total, `SELECT count(*) FROM (`+dedup+`) d`, args...); err != nil {

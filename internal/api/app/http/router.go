@@ -54,6 +54,7 @@ func NewRouter(sourceUC domain.SourceUseCase, priceUC domain.PriceUseCase, sched
 		r.Get("/sources", sh.ListSources)
 		r.Post("/sources/{sourceID}/fetch", sh.TriggerFetch)
 		r.Post("/sources/{sourceID}/adapter", sh.RebuildAdapter)
+		r.Post("/sources/{sourceID}/branches", sh.AddBranches)
 		r.Post("/sources/{sourceID}/clinic", sh.AttachSourceToClinic)
 		r.Post("/clinics", sh.CreateClinic)
 		r.Get("/clinics", sh.ListClinics)

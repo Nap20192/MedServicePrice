@@ -23,13 +23,13 @@ function App() {
             </Routes>
           </main>
           <ComparisonDrawer />
-          <footer className="bg-white border-t border-slate-100 py-8 mt-auto">
-            <div className="max-w-7xl mx-auto px-4 text-center">
-              <p className="text-sm text-slate-400">
-                © 2026 <span className="font-semibold text-teal-600">MedServicePrice.kz</span> — агрегатор цен на медицинские услуги в Казахстане
+          <footer className="border-t border-neutral-200 bg-neutral-50 mt-auto">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <p className="font-mono text-xs text-neutral-500">
+                © 2026 MedServicePrice.kz — агрегатор цен на медуслуги в Казахстане
               </p>
-              <p className="text-xs text-slate-300 mt-1">
-                Данные получены из открытых источников. Для уточнения цен обращайтесь в клинику напрямую.
+              <p className="text-xs text-neutral-400 max-w-md sm:text-right">
+                Данные из открытых источников. Цены уточняйте в клинике напрямую.
               </p>
             </div>
           </footer>

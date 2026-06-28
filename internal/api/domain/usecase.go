@@ -60,6 +60,9 @@ type SourceUseCase interface {
 	TriggerFetch(ctx context.Context, sourceID uuid.UUID) (*SourceCommandResult, error)
 	TriggerFetchAll(ctx context.Context, trigger string) (int, error)
 	RebuildAdapter(ctx context.Context, sourceID uuid.UUID) (*SourceCommandResult, error)
+	// AddBranches creates many branch clinics under one source/network — all sharing
+	// the given name and the source's crawled service pool, differing by location.
+	AddBranches(ctx context.Context, sourceID uuid.UUID, name string, branches []Clinic) ([]Clinic, error)
 }
 
 type SchedulerUseCase interface {
