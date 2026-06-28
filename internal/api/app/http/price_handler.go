@@ -3,6 +3,7 @@ package http
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"medprice/internal/api/domain"
 )
@@ -12,15 +13,27 @@ type priceHandler struct {
 }
 
 func (h *priceHandler) SearchPrices(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query().Get("q")
-	city := r.URL.Query().Get("city")
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	offset, _ := strconv.Atoi(q.Get("offset"))
+	minPrice, _ := strconv.ParseFloat(q.Get("min_price"), 64)
+	maxPrice, _ := strconv.ParseFloat(q.Get("max_price"), 64)
 
-	prices, err := h.usecase.Search(r.Context(), query, city)
+	result, err := h.usecase.Search(r.Context(), domain.PriceSearch{
+		Query:    q.Get("q"),
+		City:     q.Get("city"),
+		Category: q.Get("category"),
+		Sort:     q.Get("sort"),
+		MinPrice: minPrice,
+		MaxPrice: maxPrice,
+		Limit:    limit,
+		Offset:   offset,
+	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(prices)
+	json.NewEncoder(w).Encode(result)
 }

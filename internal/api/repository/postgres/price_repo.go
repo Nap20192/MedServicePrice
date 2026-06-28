@@ -18,54 +18,75 @@ func NewPriceRepository(db *database.DB) domain.PriceRepository {
 	return &priceRepo{db: db.DB}
 }
 
-func (r *priceRepo) SearchPrices(ctx context.Context, query string, city string) ([]domain.AggregatedPrice, error) {
+var priceSortSQL = map[string]string{
+	"price_asc":  "d.price_kzt ASC",
+	"price_desc": "d.price_kzt DESC",
+	"date_desc":  "d.parsed_at DESC",
+}
+
+func (r *priceRepo) SearchPrices(ctx context.Context, p domain.PriceSearch) ([]domain.AggregatedPrice, int, error) {
 	// Reads the published gold table only. parsed_services (raw) is never touched
 	// here — the normalize service owns that layer.
-	sqlQuery := `
-		SELECT
-			o.id AS price_id,
-			c.id AS clinic_id,
-			c.name AS clinic_name,
-			c.url AS clinic_url,
-			o.city,
-			c.address,
-			sc.name_norm AS service_name_norm,
-			sc.category,
-			o.price_kzt,
-			o.parsed_at
+	//
+	// DISTINCT ON (clinic, service): one row per clinic+service (the cheapest), so a
+	// clinic that maps a service from several sources/cities is not shown twice.
+	args := []any{}
+	where := "WHERE o.is_active = true"
+	argIdx := 1
+	if p.Query != "" {
+		where += fmt.Sprintf(` AND sc.name_norm ILIKE $%d`, argIdx)
+		args = append(args, "%"+p.Query+"%")
+		argIdx++
+	}
+	if p.City != "" {
+		where += fmt.Sprintf(` AND o.city::text ILIKE $%d`, argIdx)
+		args = append(args, "%"+p.City+"%")
+		argIdx++
+	}
+	if p.Category != "" {
+		where += fmt.Sprintf(` AND sc.category::text = $%d`, argIdx)
+		args = append(args, p.Category)
+		argIdx++
+	}
+	if p.MinPrice > 0 {
+		where += fmt.Sprintf(` AND o.price_kzt >= $%d`, argIdx)
+		args = append(args, p.MinPrice)
+		argIdx++
+	}
+	if p.MaxPrice > 0 {
+		where += fmt.Sprintf(` AND o.price_kzt <= $%d`, argIdx)
+		args = append(args, p.MaxPrice)
+		argIdx++
+	}
+
+	dedup := `
+		SELECT DISTINCT ON (c.id, sc.id)
+			o.id AS price_id, c.id AS clinic_id, c.name AS clinic_name, c.url AS clinic_url,
+			o.city, c.address, sc.name_norm AS service_name_norm, sc.category,
+			o.price_kzt, o.parsed_at
 		FROM service_offers o
 		JOIN sources s ON o.source_id = s.id
 		JOIN clinics c ON s.clinic_id = c.id
 		JOIN services_catalog sc ON o.service_catalog_id = sc.id
-		WHERE o.is_active = true
-	`
+		` + where + `
+		ORDER BY c.id, sc.id, o.price_kzt ASC`
 
-	args := []interface{}{}
-	argIdx := 1
-
-	if query != "" {
-		sqlQuery += fmt.Sprintf(` AND sc.name_norm ILIKE $%d`, argIdx)
-		args = append(args, "%"+query+"%")
-		argIdx++
+	var total int
+	if err := r.db.GetContext(ctx, &total, `SELECT count(*) FROM (`+dedup+`) d`, args...); err != nil {
+		return nil, 0, err
 	}
 
-	if city != "" {
-		sqlQuery += fmt.Sprintf(` AND o.city::text ILIKE $%d`, argIdx)
-		args = append(args, "%"+city+"%")
-		argIdx++
+	orderBy, ok := priceSortSQL[p.Sort]
+	if !ok {
+		orderBy = priceSortSQL["price_asc"]
 	}
+	pageQuery := `SELECT * FROM (` + dedup + `) d ORDER BY ` + orderBy +
+		fmt.Sprintf(` LIMIT $%d OFFSET $%d`, argIdx, argIdx+1)
+	args = append(args, p.Limit, p.Offset)
 
-	sqlQuery += ` ORDER BY o.price_kzt ASC LIMIT 100`
-
-	var prices []domain.AggregatedPrice
-	err := r.db.SelectContext(ctx, &prices, sqlQuery, args...)
-	if err != nil {
-		return nil, err
+	prices := []domain.AggregatedPrice{}
+	if err := r.db.SelectContext(ctx, &prices, pageQuery, args...); err != nil {
+		return nil, 0, err
 	}
-
-	if prices == nil {
-		prices = []domain.AggregatedPrice{}
-	}
-
-	return prices, nil
+	return prices, total, nil
 }

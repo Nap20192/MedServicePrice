@@ -73,82 +73,77 @@ function toMedService(p: AggregatedPrice): MedService {
   };
 }
 
-// ── Вспомогательные утилиты ──────────────────────────────────
-
-function isWorkingNow(workingHours: string): boolean {
-  const now = new Date();
-  const h = now.getHours();
-  const m = now.getMinutes();
-  const current = h * 60 + m;
-  const match = workingHours.match(/(\d{2}):(\d{2})\s*[–-]\s*(\d{2}):(\d{2})/);
-  if (!match) return true;
-  const open = parseInt(match[1]) * 60 + parseInt(match[2]);
-  const close = parseInt(match[3]) * 60 + parseInt(match[4]);
-  return current >= open && current <= close;
-}
-
-function applyFilters(data: MedService[], filters: SearchFilters): MedService[] {
-  return data.filter((s) => {
-    if (filters.city && filters.city !== 'Все города' && s.city !== filters.city) return false;
-    if (filters.category && s.category !== filters.category) return false;
-    if (s.price_kzt < filters.priceMin || s.price_kzt > filters.priceMax) return false;
-    if (filters.durationDays !== null && (s.duration_days === null || s.duration_days > filters.durationDays)) return false;
-    if (filters.workingNow && !isWorkingNow(s.working_hours)) return false;
-    if (filters.onlineBooking && !s.online_booking) return false;
-    return true;
-  });
-}
-
-function applySort(data: MedService[], sort: SortMode): MedService[] {
-  const copy = [...data];
-  switch (sort) {
-    case 'price_asc':  return copy.sort((a, b) => a.price_kzt - b.price_kzt);
-    case 'price_desc': return copy.sort((a, b) => b.price_kzt - a.price_kzt);
-    case 'date_desc':  return copy.sort((a, b) => new Date(b.parsed_at).getTime() - new Date(a.parsed_at).getTime());
-    default: return copy;
-  }
-}
 
 // ── БЭКЕНД-РЕЖИМ ─────────────────────────────────────────────
-// Реальные данные с GET /prices. Бэкенд фильтрует по q и city; остальные
-// фильтры и сортировка применяются на клиенте (helpers выше).
+// Всё считает сервер: фильтры, сортировка, дедуп и пагинация. GET /prices
+// возвращает {items, total, limit, offset}.
 
-async function fetchPrices(query: string, city?: string): Promise<MedService[]> {
-  const params = new URLSearchParams();
-  if (query.trim()) params.set('q', query.trim());
-  if (city && city !== 'Все города') params.set('city', city);
-  const qs = params.toString();
-  const rows = await apiJson<AggregatedPrice[]>(`/prices${qs ? `?${qs}` : ''}`);
-  return rows.map(toMedService);
+interface SearchResponse {
+  items: AggregatedPrice[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+const PRICE_MAX = 200000;
+
+function buildSearchParams(
+  query: string,
+  filters: Partial<SearchFilters>,
+  sort: SortMode,
+  page: number,
+  pageSize: number,
+): string {
+  const p = new URLSearchParams();
+  if (query.trim()) p.set('q', query.trim());
+  if (filters.city && filters.city !== 'Все города') p.set('city', filters.city);
+  if (filters.category) p.set('category', filters.category);
+  if (filters.priceMin && filters.priceMin > 0) p.set('min_price', String(filters.priceMin));
+  if (filters.priceMax && filters.priceMax < PRICE_MAX) p.set('max_price', String(filters.priceMax));
+  if (sort) p.set('sort', sort);
+  p.set('limit', String(pageSize));
+  p.set('offset', String((Math.max(1, page) - 1) * pageSize));
+  return p.toString();
+}
+
+export interface SearchPage {
+  items: MedService[];
+  total: number;
 }
 
 export async function searchServices(
   query: string,
-  filters: SearchFilters,
-  sort: SortMode
-): Promise<MedService[]> {
-  let result = await fetchPrices(query, filters.city);
-  result = applyFilters(result, filters);
-  result = applySort(result, sort);
-  return result;
+  filters: Partial<SearchFilters>,
+  sort: SortMode,
+  page = 1,
+  pageSize = 20,
+): Promise<SearchPage> {
+  const qs = buildSearchParams(query, filters, sort, page, pageSize);
+  const resp = await apiJson<SearchResponse>(`/prices?${qs}`);
+  return { items: resp.items.map(toMedService), total: resp.total };
+}
+
+// Fetch up to `limit` matching items (for non-paginated needs like clinic/autocomplete).
+async function fetchItems(params: URLSearchParams): Promise<MedService[]> {
+  const resp = await apiJson<SearchResponse>(`/prices?${params.toString()}`);
+  return resp.items.map(toMedService);
 }
 
 export async function getClinicById(clinicId: string): Promise<MedService[]> {
-  const all = await fetchPrices('');
+  const all = await fetchItems(new URLSearchParams({ limit: '100' }));
   return all.filter((s) => s.clinic_id === clinicId);
 }
 
 export async function getAutocomplete(query: string): Promise<string[]> {
   if (!query.trim()) return [];
-  const rows = await fetchPrices(query);
-  const names = [...new Set(rows.map((s) => s.service_name_norm))];
-  return names.slice(0, 8);
+  const rows = await fetchItems(new URLSearchParams({ q: query.trim(), limit: '8' }));
+  return [...new Set(rows.map((s) => s.service_name_norm))].slice(0, 8);
 }
 
 export async function getStats(): Promise<{ totalPrices: number; totalClinics: number }> {
-  const all = await fetchPrices('');
-  const clinics = new Set(all.map((s) => s.clinic_id)).size;
-  return { totalPrices: all.length, totalClinics: clinics };
+  const resp = await apiJson<SearchResponse>('/prices?limit=100');
+  const clinics = new Set(resp.items.map((s) => s.clinic_id)).size;
+  return { totalPrices: resp.total, totalClinics: clinics };
 }
 
 async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {

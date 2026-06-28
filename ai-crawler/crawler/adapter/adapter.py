@@ -103,7 +103,10 @@ def _compact_urls(urls: list[str], store) -> list[str]:
     for url in candidates:
         if url in kept:
             continue
-        if any(_same_scope(listing, url, allow_global_city=True) for listing in kept_listings):
+        # allow_global_city=False: KEEP city variants (e.g. for-doctors/astana). KZ med
+        # sites price per city, so a city-less parent listing does NOT cover them —
+        # dropping them lost whole cities of prices. Only collapse same-city detail pages.
+        if any(_same_scope(listing, url, allow_global_city=False) for listing in kept_listings):
             dropped += 1
             continue
         kept.add(url)

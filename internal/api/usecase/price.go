@@ -17,10 +17,16 @@ func NewPriceUseCase(pr domain.PriceRepository) domain.PriceUseCase {
 	}
 }
 
-func (uc *priceUC) Search(ctx context.Context, query string, city string) ([]domain.AggregatedPrice, error) {
-	prices, err := uc.priceRepo.SearchPrices(ctx, query, city)
+func (uc *priceUC) Search(ctx context.Context, p domain.PriceSearch) (*domain.SearchResult, error) {
+	if p.Limit <= 0 || p.Limit > 100 {
+		p.Limit = 20
+	}
+	if p.Offset < 0 {
+		p.Offset = 0
+	}
+	items, total, err := uc.priceRepo.SearchPrices(ctx, p)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search prices: %w", err)
 	}
-	return prices, nil
+	return &domain.SearchResult{Items: items, Total: total, Limit: p.Limit, Offset: p.Offset}, nil
 }

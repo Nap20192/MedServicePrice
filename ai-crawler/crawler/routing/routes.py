@@ -39,7 +39,10 @@ _CITY_SLUGS = {
     "oskemen",
 }
 _LEGACY_GUESSED_ROOTS = {"services", "doctors", "clinics", "analizes", "pricelist", "price-list"}
-_LEGACY_GUESSED_INVITRO_ROOTS = {"for-doctors", "profi"}
+# Empty: /analizes/for-doctors/<city> and /analizes/profi/<city> are REAL city-priced
+# listing pages that discovery visits and extracts (e.g. for-doctors/astana → 2135 rows).
+# Flagging them as "guessed" dropped whole cities of prices from the adapter.
+_LEGACY_GUESSED_INVITRO_ROOTS: set[str] = set()
 
 
 def host(url: str) -> str:

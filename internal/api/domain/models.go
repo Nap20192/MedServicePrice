@@ -104,3 +104,24 @@ type AggregatedPrice struct {
 	PriceKZT        float64   `db:"price_kzt" json:"price_kzt"`
 	ParsedAt        time.Time `db:"parsed_at" json:"parsed_at"`
 }
+
+// PriceSearch holds every search filter so pagination is computed server-side over
+// the full filtered set (not just one page).
+type PriceSearch struct {
+	Query    string
+	City     string
+	Category string
+	Sort     string
+	MinPrice float64
+	MaxPrice float64 // 0 = no upper bound
+	Limit    int
+	Offset   int
+}
+
+// SearchResult is a paginated, de-duplicated price search response.
+type SearchResult struct {
+	Items  []AggregatedPrice `json:"items"`
+	Total  int               `json:"total"`
+	Limit  int               `json:"limit"`
+	Offset int               `json:"offset"`
+}

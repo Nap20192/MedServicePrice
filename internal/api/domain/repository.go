@@ -26,7 +26,7 @@ type ClinicRepository interface {
 }
 
 type PriceRepository interface {
-	SearchPrices(ctx context.Context, query string, city string) ([]AggregatedPrice, error)
+	SearchPrices(ctx context.Context, p PriceSearch) ([]AggregatedPrice, int, error)
 }
 
 type AdapterRepository interface {

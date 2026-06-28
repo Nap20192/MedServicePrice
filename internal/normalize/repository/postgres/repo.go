@@ -114,10 +114,30 @@ func (r *repository) Match(ctx context.Context, rawName string) (uuid.UUID, stri
 	return uuid.Nil, ndomain.MatchNone, err
 }
 
+// TopCatalogCandidates returns up to k catalog entries lexically close to name
+// (pg_trgm, above a low floor) — the gray zone the LLM curator arbitrates. Exact /
+// high-similarity hits are already handled by Match before this is reached.
+func (r *repository) TopCatalogCandidates(ctx context.Context, name string, k int) ([]ndomain.CatalogEntry, error) {
+	if k <= 0 {
+		k = 8
+	}
+	const q = `
+		SELECT id, name_norm, category, description
+		FROM services_catalog
+		WHERE similarity(name_norm, $1) > 0.30
+		ORDER BY similarity(name_norm, $1) DESC
+		LIMIT $2`
+	var rows []ndomain.CatalogEntry
+	if err := r.db.SelectContext(ctx, &rows, q, name, k); err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
 func (r *repository) ListCatalog(ctx context.Context) ([]ndomain.CatalogEntry, error) {
 	var rows []ndomain.CatalogEntry
 	if err := r.db.SelectContext(ctx, &rows,
-		`SELECT id, name_norm, category FROM services_catalog ORDER BY name_norm`); err != nil {
+		`SELECT id, name_norm, category, description FROM services_catalog ORDER BY name_norm`); err != nil {
 		return nil, err
 	}
 	return rows, nil
@@ -136,13 +156,14 @@ func (r *repository) AddAlias(ctx context.Context, catalogID uuid.UUID, aliasTex
 // EnsureCatalogEntry inserts a new canonical service, or returns the existing id
 // if one with the same name_key already exists. name_key is a generated unique
 // column, so ON CONFLICT resolves concurrent/duplicate creation safely.
-func (r *repository) EnsureCatalogEntry(ctx context.Context, nameNorm, category string) (uuid.UUID, error) {
+func (r *repository) EnsureCatalogEntry(ctx context.Context, nameNorm, category, description string) (uuid.UUID, error) {
 	var id uuid.UUID
 	err := r.db.GetContext(ctx, &id, `
-		INSERT INTO services_catalog (name_norm, category)
-		VALUES ($1, $2::service_category)
-		ON CONFLICT (name_key) DO UPDATE SET name_norm = services_catalog.name_norm
-		RETURNING id`, nameNorm, category)
+		INSERT INTO services_catalog (name_norm, category, description)
+		VALUES ($1, $2::service_category, NULLIF($3, ''))
+		ON CONFLICT (name_key) DO UPDATE SET
+			description = COALESCE(services_catalog.description, NULLIF(EXCLUDED.description, ''))
+		RETURNING id`, nameNorm, category, description)
 	return id, err
 }
 

@@ -40,15 +40,14 @@ export default function SearchPage() {
     }));
   }, [searchParams]);
 
-  const { data, loading } = useMedicalServices(query, filters, sort);
-
-  // Пагинация списка
+  // Серверная пагинация: страница входит в запрос, total приходит с бэка.
   const [page, setPage] = useState(1);
-  const pageCount = Math.max(1, Math.ceil(data.length / PAGE_SIZE));
+  const { data, total, loading } = useMedicalServices(query, filters, sort, page, PAGE_SIZE);
+
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
-  const pageItems = data.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
-  const rangeStart = data.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
-  const rangeEnd = Math.min(safePage * PAGE_SIZE, data.length);
+  const rangeStart = total === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(rangeStart + data.length - 1, total);
 
   // Сброс на первую страницу при смене запроса/фильтров/сортировки
   useEffect(() => {
@@ -173,9 +172,9 @@ export default function SearchPage() {
                 <p className="text-sm text-slate-500">
                   {loading ? 'Поиск...' : (
                     <>
-                      Найдено <span className="font-semibold text-slate-800">{data.length}</span> предложений
+                      Найдено <span className="font-semibold text-slate-800">{total}</span> предложений
                       {query && <> по запросу «<span className="font-medium text-teal-600">{query}</span>»</>}
-                      {data.length > PAGE_SIZE && (
+                      {total > PAGE_SIZE && (
                         <span className="text-slate-400"> · показаны {rangeStart}–{rangeEnd}</span>
                       )}
                     </>
@@ -214,7 +213,7 @@ export default function SearchPage() {
               <div>
                 {loading ? (
                   <SkeletonList count={5} />
-                ) : data.length === 0 ? (
+                ) : total === 0 ? (
                   <div className="text-center py-20">
                     <div className="text-6xl mb-4">🔍</div>
                     <h3 className="text-xl font-semibold text-slate-700 mb-2">Ничего не найдено</h3>
@@ -223,7 +222,7 @@ export default function SearchPage() {
                 ) : (
                   <>
                     <div className="space-y-4">
-                      {pageItems.map((service) => (
+                      {data.map((service) => (
                         <ServiceCard key={service.service_id} service={service} showCity={filters.city === 'Все города'} />
                       ))}
                     </div>

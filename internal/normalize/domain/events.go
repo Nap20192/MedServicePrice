@@ -55,18 +55,32 @@ const (
 	MatchNone    = "none"
 )
 
-// CatalogEntry is one справочник row, used to prompt the LLM matcher.
+// CatalogEntry is one справочник row, used to prompt the LLM curator. Description
+// is the AI's note on what the service is, to disambiguate close names.
 type CatalogEntry struct {
-	ID       uuid.UUID `db:"id"`
-	Name     string    `db:"name_norm"`
-	Category string    `db:"category"`
+	ID          uuid.UUID `db:"id"`
+	Name        string    `db:"name_norm"`
+	Category    string    `db:"category"`
+	Description *string   `db:"description"`
 }
 
-// LLMMatcher suggests a catalog id for a raw name that deterministic matching
-// missed. Returns uuid.Nil if no entry fits. Best-effort: errors must not fail
-// the whole batch (caller falls back to the unmatched queue).
+// CurateDecision is the LLM's call on a raw service that deterministic matching
+// missed: either it's the same as one of the offered catalog candidates (Match,
+// Index 1-based), or it's a genuinely new service to add (CanonicalName + Category).
+type CurateDecision struct {
+	Match         bool    `json:"match"`
+	Index         int     `json:"index"`          // 1-based into candidates, when Match
+	CanonicalName string  `json:"canonical_name"` // clean name for the new entry, when !Match
+	Category      string  `json:"category"`       // one of the 4 service_category values
+	Description   string  `json:"description"`    // short note on what the service is, when !Match
+	Confidence    float64 `json:"confidence"`
+}
+
+// LLMMatcher lets an LLM curate the catalog: given a raw service name and the
+// closest existing catalog candidates, decide whether it maps to one of them or
+// should become a new canonical entry. Best-effort: errors must not fail the batch.
 type LLMMatcher interface {
-	Suggest(ctx context.Context, rawName string, catalog []CatalogEntry) (uuid.UUID, float64, error)
+	Curate(ctx context.Context, rawName, categoryHint string, candidates []CatalogEntry) (CurateDecision, error)
 }
 
 // Repository is the persistence port the usecase depends on. The normalize
@@ -99,5 +113,8 @@ type Repository interface {
 	// EnsureCatalogEntry returns the catalog id for a service name, creating a new
 	// canonical entry when none exists. Lets the catalog grow to cover real data
 	// instead of squashing thousands of services into a tiny seed catalog.
-	EnsureCatalogEntry(ctx context.Context, nameNorm, category string) (uuid.UUID, error)
+	EnsureCatalogEntry(ctx context.Context, nameNorm, category, description string) (uuid.UUID, error)
+	// TopCatalogCandidates returns the closest existing catalog entries (pg_trgm),
+	// for the LLM curator to anchor its match-or-create decision on.
+	TopCatalogCandidates(ctx context.Context, name string, k int) ([]CatalogEntry, error)
 }

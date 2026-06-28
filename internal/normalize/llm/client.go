@@ -1,7 +1,8 @@
-// Package llm is an OpenAI-compatible (DeepSeek) matcher: given a raw service
-// name and the catalog, it asks the model which catalog entry fits. It implements
-// domain.LLMMatcher. Best-effort — any failure returns uuid.Nil so the caller
-// falls back to the unmatched queue.
+// Package llm is an OpenAI-compatible (DeepSeek) catalog curator: given a raw
+// service name and the closest existing catalog candidates, it decides whether the
+// service maps to one of them or should become a new canonical entry. Implements
+// domain.LLMMatcher. Best-effort — any failure is returned so the caller can fall
+// back to deterministic auto-create.
 package llm
 
 import (
@@ -12,8 +13,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
 
 	ndomain "medprice/internal/normalize/domain"
 )
@@ -64,75 +63,90 @@ type chatResponse struct {
 	} `json:"choices"`
 }
 
-// The model returns a 1-based index into the catalog list (0 = no fit).
-type suggestion struct {
-	Index      int     `json:"index"`
-	Confidence float64 `json:"confidence"`
-}
+const curateSystem = `Ты ведёшь справочник медицинских услуг. Тебе дают сырое название услуги
+с сайта клиники и список похожих канонических услуг из справочника. Реши: это та же
+услуга, что одна из них, или принципиально новая.
 
-// Suggest implements domain.LLMMatcher.
-func (c *Client) Suggest(ctx context.Context, rawName string, catalog []ndomain.CatalogEntry) (uuid.UUID, float64, error) {
-	if len(catalog) == 0 {
-		return uuid.Nil, 0, nil
-	}
+Та же = тот же медицинский смысл (например "ОАК", "Общий анализ крови", "CBC",
+"Клинический анализ крови" — одна услуга). Разный объём/панель/комплекс = разные услуги.
+
+Категории строго одна из: лаборатория, прием врача, диагностика, процедура.
+
+Отвечай ТОЛЬКО JSON:
+{"match": true, "index": <номер из списка>, "confidence": <0..1>}
+или
+{"match": false, "canonical_name": "<чистое каноническое имя новой услуги>",
+ "category": "<одна из категорий>",
+ "description": "<1-2 предложения: что это за услуга, чтобы потом отличать от похожих>",
+ "confidence": <0..1>}`
+
+// Curate implements domain.LLMMatcher.
+func (c *Client) Curate(ctx context.Context, rawName, categoryHint string,
+	candidates []ndomain.CatalogEntry) (ndomain.CurateDecision, error) {
+	var zero ndomain.CurateDecision
 
 	var list strings.Builder
-	for i, e := range catalog {
-		fmt.Fprintf(&list, "%d. %s [%s]\n", i+1, e.Name, e.Category)
+	for i, e := range candidates {
+		desc := ""
+		if e.Description != nil && *e.Description != "" {
+			desc = " — " + *e.Description
+		}
+		fmt.Fprintf(&list, "%d. %s [%s]%s\n", i+1, e.Name, e.Category, desc)
 	}
-	user := fmt.Sprintf(
-		"Сырое название медицинской услуги с сайта клиники:\n%q\n\n"+
-			"Справочник канонических услуг:\n%s\n"+
-			"Выбери ОДНУ услугу из справочника, которой соответствует сырое название. "+
-			"Если ни одна не подходит — верни index 0. "+
-			`Ответь строго JSON: {"index": <номер из списка или 0>, "confidence": <число 0..1>}.`,
-		rawName, list.String())
+	hint := categoryHint
+	if hint == "" {
+		hint = "нет"
+	}
+	user := fmt.Sprintf("Сырое название:\n%q\nПодсказка категории от парсера: %s\n\n"+
+		"Похожие услуги справочника:\n%s", rawName, hint, list.String())
 
 	reqBody := chatRequest{
 		Model:       c.cfg.Model,
 		Temperature: 0,
 		Messages: []chatMessage{
-			{Role: "system", Content: "Ты сопоставляешь названия медицинских услуг с каноническим справочником. Отвечаешь только JSON."},
+			{Role: "system", Content: curateSystem},
 			{Role: "user", Content: user},
 		},
 		ResponseFormat: map[string]any{"type": "json_object"},
 	}
 	buf, err := json.Marshal(reqBody)
 	if err != nil {
-		return uuid.Nil, 0, err
+		return zero, err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		strings.TrimRight(c.cfg.BaseURL, "/")+"/chat/completions", bytes.NewReader(buf))
 	if err != nil {
-		return uuid.Nil, 0, err
+		return zero, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.cfg.APIKey)
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return uuid.Nil, 0, err
+		return zero, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return uuid.Nil, 0, fmt.Errorf("llm http %d", resp.StatusCode)
+		return zero, fmt.Errorf("llm http %d", resp.StatusCode)
 	}
 
 	var cr chatResponse
 	if err := json.NewDecoder(resp.Body).Decode(&cr); err != nil {
-		return uuid.Nil, 0, err
+		return zero, err
 	}
 	if len(cr.Choices) == 0 {
-		return uuid.Nil, 0, nil
+		return zero, fmt.Errorf("llm empty choices")
 	}
 
-	var s suggestion
-	if err := json.Unmarshal([]byte(cr.Choices[0].Message.Content), &s); err != nil {
-		return uuid.Nil, 0, fmt.Errorf("parse llm json: %w", err)
+	var d ndomain.CurateDecision
+	if err := json.Unmarshal([]byte(cr.Choices[0].Message.Content), &d); err != nil {
+		return zero, fmt.Errorf("parse llm json: %w", err)
 	}
-	if s.Index < 1 || s.Index > len(catalog) || s.Confidence < c.cfg.MinConf {
-		return uuid.Nil, s.Confidence, nil
+	// Low-confidence match is treated as "no decision" by the caller (it keeps the
+	// deterministic auto-create), so surface it as a non-match miss.
+	if d.Match && d.Confidence < c.cfg.MinConf {
+		return ndomain.CurateDecision{Match: false, Confidence: d.Confidence}, nil
 	}
-	return catalog[s.Index-1].ID, s.Confidence, nil
+	return d, nil
 }

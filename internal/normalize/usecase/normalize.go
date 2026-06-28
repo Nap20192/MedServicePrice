@@ -134,6 +134,7 @@ func (s *Service) ProcessSource(ctx context.Context, sourceID uuid.UUID, meta Ta
 		ndomain.MatchAlias:   0,
 		ndomain.MatchCatalog: 0,
 		ndomain.MatchFuzzy:   0,
+		ndomain.MatchLLM:     0,
 		ndomain.MatchNew:     0,
 		ndomain.MatchNone:    0,
 	}
@@ -144,11 +145,11 @@ func (s *Service) ProcessSource(ctx context.Context, sourceID uuid.UUID, meta Ta
 			return errors.Wrapf(err, "match %q", row.Name)
 		}
 
-		// Deterministic miss → grow the catalog: create a new canonical entry from
-		// this service. Previously this fell to an LLM that was forced to pick from a
-		// tiny 10-row catalog and squashed thousands of distinct services into a
-		// handful of entries (e.g. 720 different services → "Биохимический анализ
-		// крови"), so service_offers ended up nearly empty.
+		// Deterministic miss → the LLM curates the catalog: anchored on the closest
+		// existing entries, it decides whether this is the same service (bind) or a
+		// new one (create with a clean canonical name). The LLM only sees a few
+		// candidates (not the whole catalog), so it can't squash distinct services
+		// the way a forced pick from a tiny catalog used to.
 		if catalogID == uuid.Nil {
 			name := strings.TrimSpace(row.Name)
 			// Real service names are short. An empty or paragraph-length "name" is a
@@ -161,12 +162,17 @@ func (s *Service) ProcessSource(ctx context.Context, sourceID uuid.UUID, meta Ta
 				}
 				continue
 			}
-			id, cerr := s.repo.EnsureCatalogEntry(ctx, name, categoryEnum(row))
-			if cerr != nil {
-				return errors.Wrapf(cerr, "ensure catalog entry %q", name)
+
+			catalogID, method, err = s.curate(ctx, name, row)
+			if err != nil {
+				return errors.Wrapf(err, "curate %q", name)
 			}
-			catalogID, method = id, ndomain.MatchNew
-			created++
+			if err := s.repo.AddAlias(ctx, catalogID, name, "llm"); err != nil {
+				return errors.Wrap(err, "add alias")
+			}
+			if method == ndomain.MatchNew {
+				created++
+			}
 		}
 		matched++
 		methodCounts[method]++
@@ -234,6 +240,61 @@ func progressLog(log rabbitmq.Logger, sourceLabel string, done, total, matched, 
 		"unmatched", unmatched,
 		"gold_offers_so_far", len(offers),
 		"duration_s", time.Since(started).Seconds())
+}
+
+// curate resolves a deterministic miss into a catalog id. With the LLM it anchors
+// on the closest existing entries and decides match-vs-create; without it (or with
+// no close candidates) it falls back to a verbatim auto-create. Returns the bound
+// catalog id and the match method.
+func (s *Service) curate(ctx context.Context, name string, row ndomain.RawRow) (uuid.UUID, string, error) {
+	create := func() (uuid.UUID, string, error) {
+		id, err := s.repo.EnsureCatalogEntry(ctx, name, categoryEnum(row), "")
+		return id, ndomain.MatchNew, err
+	}
+	if s.llm == nil {
+		return create()
+	}
+	cands, err := s.repo.TopCatalogCandidates(ctx, name, 8)
+	if err != nil {
+		return uuid.Nil, "", err
+	}
+	if len(cands) == 0 {
+		return create() // nothing close — clearly a new service, no LLM call needed
+	}
+
+	hint := ""
+	if row.Category != nil {
+		hint = *row.Category
+	}
+	dec, lerr := s.llm.Curate(ctx, name, hint, cands)
+	if lerr != nil {
+		s.log.Error("normalize curate failed; auto-creating", "raw", name, "err", lerr)
+		return create()
+	}
+	if dec.Match && dec.Index >= 1 && dec.Index <= len(cands) {
+		return cands[dec.Index-1].ID, ndomain.MatchLLM, nil
+	}
+	// New canonical service: name, category and description authored by the LLM.
+	cn := strings.TrimSpace(dec.CanonicalName)
+	if cn == "" {
+		cn = name
+	}
+	id, err := s.repo.EnsureCatalogEntry(ctx, truncRunes(cn, maxCatalogNameLen),
+		validCategory(dec.Category, row), strings.TrimSpace(dec.Description))
+	return id, ndomain.MatchNew, err
+}
+
+// validCategory normalizes an LLM-suggested category to a valid enum value,
+// falling back to the keyword heuristic when the LLM returns something off-list.
+func validCategory(c string, row ndomain.RawRow) string {
+	if c == "приём врача" {
+		c = "прием врача"
+	}
+	switch c {
+	case "лаборатория", "прием врача", "диагностика", "процедура":
+		return c
+	}
+	return categoryEnum(row)
 }
 
 // categoryEnum maps a raw row to a valid service_category enum value. The crawler's

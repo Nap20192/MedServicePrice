@@ -22,9 +22,12 @@ const DEFAULT_FILTERS: SearchFilters = {
 export function useMedicalServices(
   query: string,
   filters: Partial<SearchFilters> = {},
-  sort: SortMode = 'price_asc'
+  sort: SortMode = 'price_asc',
+  page = 1,
+  pageSize = 20
 ) {
   const [data, setData] = useState<MedService[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,19 +37,20 @@ export function useMedicalServices(
     setLoading(true);
     setError(null);
     try {
-      const result = await searchServices(query, mergedFilters, sort);
-      setData(result);
+      const result = await searchServices(query, mergedFilters, sort, page, pageSize);
+      setData(result.items);
+      setTotal(result.total);
     } catch (e) {
       setError('Ошибка загрузки данных');
     } finally {
       setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, JSON.stringify(mergedFilters), sort]);
+  }, [query, JSON.stringify(mergedFilters), sort, page, pageSize]);
 
   useEffect(() => {
     fetch();
   }, [fetch]);
 
-  return { data, loading, error, refetch: fetch };
+  return { data, total, loading, error, refetch: fetch };
 }

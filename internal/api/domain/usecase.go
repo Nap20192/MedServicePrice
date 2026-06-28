@@ -69,5 +69,5 @@ type SchedulerUseCase interface {
 }
 
 type PriceUseCase interface {
-	Search(ctx context.Context, query string, city string) ([]AggregatedPrice, error)
+	Search(ctx context.Context, p PriceSearch) (*SearchResult, error)
 }
