@@ -6,6 +6,7 @@ package usecase
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"strings"
 	"time"
 
@@ -19,11 +20,18 @@ import (
 // Real service names are short; longer strings are crawler mis-extractions
 // (descriptions) and must not become catalog entries (catalog name_norm is varchar(255)).
 const maxCatalogNameLen = 200
+const llmCandidateLimit = 5
+const minLLMCandidateSimilarity = 0.38
+
+type Options struct {
+	MaxLLMCallsPerSource int
+}
 
 type Service struct {
-	repo ndomain.Repository
-	llm  ndomain.LLMMatcher // optional; nil = LLM fallback disabled
-	log  rabbitmq.Logger
+	repo                 ndomain.Repository
+	llm                  ndomain.LLMMatcher // optional; nil = LLM fallback disabled
+	log                  rabbitmq.Logger
+	maxLLMCallsPerSource int
 }
 
 // truncRunes caps a string to n runes (safe for varchar limits + Cyrillic).
@@ -44,8 +52,12 @@ type TaskMeta struct {
 }
 
 // NewService wires the normalize usecase. llm may be nil (deterministic matching only).
-func NewService(repo ndomain.Repository, llm ndomain.LLMMatcher, log rabbitmq.Logger) *Service {
-	return &Service{repo: repo, llm: llm, log: log}
+func NewService(repo ndomain.Repository, llm ndomain.LLMMatcher, log rabbitmq.Logger, opts ...Options) *Service {
+	cfg := Options{MaxLLMCallsPerSource: 80}
+	if len(opts) > 0 {
+		cfg = opts[0]
+	}
+	return &Service{repo: repo, llm: llm, log: log, maxLLMCallsPerSource: cfg.MaxLLMCallsPerSource}
 }
 
 func (s *Service) ProcessPending(ctx context.Context, limit int) (int, error) {
@@ -129,8 +141,9 @@ func (s *Service) ProcessSource(ctx context.Context, sourceID uuid.UUID, meta Ta
 
 	// Dedup raw rows that collapse to the same catalog service: keep the cheapest.
 	offers := make(map[uuid.UUID]ndomain.Offer)
-	matched, created := 0, 0
+	matched, created, llmCalls, llmSkipped := 0, 0, 0, 0
 	methodCounts := map[string]int{
+		ndomain.MatchBound:   0,
 		ndomain.MatchAlias:   0,
 		ndomain.MatchCatalog: 0,
 		ndomain.MatchFuzzy:   0,
@@ -140,9 +153,16 @@ func (s *Service) ProcessSource(ctx context.Context, sourceID uuid.UUID, meta Ta
 	}
 	categoryCounts := map[string]int{}
 	for i, row := range rows {
-		catalogID, method, err := s.repo.Match(ctx, row.Name)
-		if err != nil {
-			return errors.Wrapf(err, "match %q", row.Name)
+		catalogID, method := uuid.Nil, ndomain.MatchNone
+		if row.CatalogID != nil && *row.CatalogID != uuid.Nil {
+			catalogID = *row.CatalogID
+			method = ndomain.MatchBound
+		} else {
+			var err error
+			catalogID, method, err = s.repo.Match(ctx, row.Name)
+			if err != nil {
+				return errors.Wrapf(err, "match %q", row.Name)
+			}
 		}
 
 		// Deterministic miss → the LLM curates the catalog: anchored on the closest
@@ -163,7 +183,7 @@ func (s *Service) ProcessSource(ctx context.Context, sourceID uuid.UUID, meta Ta
 				continue
 			}
 
-			catalogID, method, err = s.curate(ctx, name, row)
+			catalogID, method, err = s.curate(ctx, name, row, &llmCalls, &llmSkipped)
 			if err != nil {
 				return errors.Wrapf(err, "curate %q", name)
 			}
@@ -179,8 +199,10 @@ func (s *Service) ProcessSource(ctx context.Context, sourceID uuid.UUID, meta Ta
 		if row.Category != nil && *row.Category != "" {
 			categoryCounts[*row.Category]++
 		}
-		if err := s.repo.BindParsed(ctx, row.ID, catalogID); err != nil {
-			return errors.Wrap(err, "bind parsed row")
+		if row.CatalogID == nil || *row.CatalogID != catalogID {
+			if err := s.repo.BindParsed(ctx, row.ID, catalogID); err != nil {
+				return errors.Wrap(err, "bind parsed row")
+			}
 		}
 
 		if cur, ok := offers[catalogID]; !ok || row.PriceKZT < cur.PriceKZT {
@@ -217,6 +239,8 @@ func (s *Service) ProcessSource(ctx context.Context, sourceID uuid.UUID, meta Ta
 		"worker_rows_written", meta.RowsWritten,
 		"matched", matched,
 		"created_catalog_entries", created,
+		"llm_calls", llmCalls,
+		"llm_skipped", llmSkipped,
 		"gold_offers", len(list),
 		"deduped_matches", matched-len(list),
 		"methods", methodCounts,
@@ -246,28 +270,41 @@ func progressLog(log rabbitmq.Logger, sourceLabel string, done, total, matched, 
 // on the closest existing entries and decides match-vs-create; without it (or with
 // no close candidates) it falls back to a verbatim auto-create. Returns the bound
 // catalog id and the match method.
-func (s *Service) curate(ctx context.Context, name string, row ndomain.RawRow) (uuid.UUID, string, error) {
+func (s *Service) curate(ctx context.Context, name string, row ndomain.RawRow, llmCalls *int, llmSkipped *int) (uuid.UUID, string, error) {
 	create := func() (uuid.UUID, string, error) {
 		id, err := s.repo.EnsureCatalogEntry(ctx, name, categoryEnum(row), "")
 		return id, ndomain.MatchNew, err
 	}
-	if s.llm == nil {
+	if s.llm == nil || s.llm.Disabled() {
+		(*llmSkipped)++
 		return create()
 	}
-	cands, err := s.repo.TopCatalogCandidates(ctx, name, 8)
+	if s.maxLLMCallsPerSource >= 0 && *llmCalls >= s.maxLLMCallsPerSource {
+		(*llmSkipped)++
+		return create()
+	}
+	cands, err := s.repo.TopCatalogCandidates(ctx, name, llmCandidateLimit)
 	if err != nil {
 		return uuid.Nil, "", err
 	}
 	if len(cands) == 0 {
 		return create() // nothing close — clearly a new service, no LLM call needed
 	}
+	if similarity(name, cands[0].Name) < minLLMCandidateSimilarity {
+		(*llmSkipped)++
+		return create()
+	}
 
 	hint := ""
 	if row.Category != nil {
 		hint = *row.Category
 	}
+	(*llmCalls)++
 	dec, lerr := s.llm.Curate(ctx, name, hint, cands)
 	if lerr != nil {
+		if errors.Is(lerr, ndomain.ErrLLMDisabled) || s.llm.Disabled() {
+			s.log.Error("normalize LLM disabled; continuing without LLM", "err", lerr)
+		}
 		s.log.Error("normalize curate failed; auto-creating", "raw", name, "err", lerr)
 		return create()
 	}
@@ -282,6 +319,33 @@ func (s *Service) curate(ctx context.Context, name string, row ndomain.RawRow) (
 	id, err := s.repo.EnsureCatalogEntry(ctx, truncRunes(cn, maxCatalogNameLen),
 		validCategory(dec.Category, row), strings.TrimSpace(dec.Description))
 	return id, ndomain.MatchNew, err
+}
+
+func similarity(a, b string) float64 {
+	ak := tokenSet(a)
+	bk := tokenSet(b)
+	if len(ak) == 0 || len(bk) == 0 {
+		return 0
+	}
+	inter := 0
+	for token := range ak {
+		if _, ok := bk[token]; ok {
+			inter++
+		}
+	}
+	return float64(inter) / math.Sqrt(float64(len(ak)*len(bk)))
+}
+
+func tokenSet(s string) map[string]struct{} {
+	out := map[string]struct{}{}
+	for _, part := range strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
+		return !(r >= 'a' && r <= 'z' || r >= 'а' && r <= 'я' || r == 'ё' || r >= '0' && r <= '9')
+	}) {
+		if len([]rune(part)) >= 2 {
+			out[part] = struct{}{}
+		}
+	}
+	return out
 }
 
 // validCategory normalizes an LLM-suggested category to a valid enum value,

@@ -3,10 +3,13 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+var ErrLLMDisabled = errors.New("llm disabled")
 
 // ParseCompletedPayload mirrors queue/messages.md §3 (Worker -> Normalize).
 type ParseCompletedPayload struct {
@@ -27,13 +30,14 @@ type SourceInfo struct {
 
 // RawRow is an active parsed_services row (the raw layer) for one source.
 type RawRow struct {
-	ID           uuid.UUID `db:"id"`
-	Name         string    `db:"service_name_raw"`
-	PriceKZT     float64   `db:"price_kzt"`
-	Currency     string    `db:"currency"`
-	DurationDays *int      `db:"duration_days"`
-	Category     *string   `db:"category"`
-	ParsedAt     time.Time `db:"parsed_at"`
+	ID           uuid.UUID  `db:"id"`
+	CatalogID    *uuid.UUID `db:"service_catalog_id"`
+	Name         string     `db:"service_name_raw"`
+	PriceKZT     float64    `db:"price_kzt"`
+	Currency     string     `db:"currency"`
+	DurationDays *int       `db:"duration_days"`
+	Category     *string    `db:"category"`
+	ParsedAt     time.Time  `db:"parsed_at"`
 }
 
 // Offer is a normalized, catalog-bound price ready to publish to the gold table.
@@ -47,6 +51,7 @@ type Offer struct {
 
 // Match methods, for logging/telemetry.
 const (
+	MatchBound   = "bound"
 	MatchAlias   = "alias"
 	MatchCatalog = "catalog"
 	MatchFuzzy   = "fuzzy"
@@ -81,6 +86,7 @@ type CurateDecision struct {
 // should become a new canonical entry. Best-effort: errors must not fail the batch.
 type LLMMatcher interface {
 	Curate(ctx context.Context, rawName, categoryHint string, candidates []CatalogEntry) (CurateDecision, error)
+	Disabled() bool
 }
 
 // Repository is the persistence port the usecase depends on. The normalize

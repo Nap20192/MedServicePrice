@@ -45,6 +45,9 @@ LLM_API_KEY=... \
 LLM_MODEL=deepseek-chat \
 LLM_MIN_CONFIDENCE=0.7 \
 LLM_TIMEOUT_S=20 \
+LLM_MAX_TOKENS=120 \
+LLM_MAX_CALLS_PER_SOURCE=80 \
+NORMALIZE_WORKERS=1 \
 go run ./cmd/normalize
 ```
 
@@ -59,6 +62,9 @@ docker compose -f deploy/docker-compose.yml up normalize
 - deterministic match: alias, exact catalog key, trigram/fuzzy candidates;
 - AI fallback: OpenAI-compatible `/chat/completions` endpoint decides whether to bind
   to an existing catalog entry or create a new canonical service;
+- token guard: the LLM answer is capped by `LLM_MAX_TOKENS`, each source is capped by
+  `LLM_MAX_CALLS_PER_SOURCE`, and quota/rate-limit/token errors disable the LLM until
+  process restart while deterministic matching keeps running;
 - unmatched/noisy rows are persisted in `unmatched_services`;
 - normalized, deduplicated offers are published to `service_offers`, which is the only
   table read by the public API.

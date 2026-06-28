@@ -60,7 +60,7 @@ func (r *repository) PendingSourceIDs(ctx context.Context, limit int) ([]uuid.UU
 
 func (r *repository) LoadActiveRows(ctx context.Context, sourceID uuid.UUID) ([]ndomain.RawRow, error) {
 	const q = `
-		SELECT id, service_name_raw, price_kzt, currency, duration_days, category, parsed_at
+		SELECT id, service_catalog_id, service_name_raw, price_kzt, currency, duration_days, category, parsed_at
 		FROM parsed_services
 		WHERE source_id = $1 AND is_active`
 	var rows []ndomain.RawRow

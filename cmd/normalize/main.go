@@ -37,12 +37,17 @@ func buildLLM(log rabbitmq.Logger) domain.LLMMatcher {
 	if v, err := strconv.Atoi(os.Getenv("LLM_TIMEOUT_S")); err == nil && v > 0 {
 		timeout = time.Duration(v) * time.Second
 	}
+	maxTokens := 120
+	if v, err := strconv.Atoi(os.Getenv("LLM_MAX_TOKENS")); err == nil && v > 0 {
+		maxTokens = v
+	}
 	c := llm.New(llm.Config{
-		BaseURL: os.Getenv("LLM_BASE_URL"),
-		APIKey:  os.Getenv("LLM_API_KEY"),
-		Model:   os.Getenv("LLM_MODEL"),
-		MinConf: minConf,
-		Timeout: timeout,
+		BaseURL:   os.Getenv("LLM_BASE_URL"),
+		APIKey:    os.Getenv("LLM_API_KEY"),
+		Model:     os.Getenv("LLM_MODEL"),
+		MinConf:   minConf,
+		Timeout:   timeout,
+		MaxTokens: maxTokens,
 	})
 	if c == nil {
 		log.Info("LLM fallback disabled (set LLM_BASE_URL/LLM_API_KEY/LLM_MODEL to enable)")
@@ -50,7 +55,8 @@ func buildLLM(log rabbitmq.Logger) domain.LLMMatcher {
 	}
 	log.Info("LLM fallback enabled for normalize",
 		"model", os.Getenv("LLM_MODEL"),
-		"confidence_threshold", minConf)
+		"confidence_threshold", minConf,
+		"max_tokens", maxTokens)
 	return c
 }
 
@@ -91,13 +97,15 @@ func main() {
 	defer conn.Close()
 
 	repo := normpg.NewRepository(db)
-	svc := normuc.NewService(repo, buildLLM(appLogger), appLogger)
+	svc := normuc.NewService(repo, buildLLM(appLogger), appLogger, normuc.Options{
+		MaxLLMCallsPerSource: intEnv("LLM_MAX_CALLS_PER_SOURCE", 80),
+	})
 	cons := normapp.NewConsumer(svc, appLogger)
 
 	c := consumer.NewConsumer(conn).Configure(
 		consumer.QueueName("q.parse.completed"),
 		consumer.ConsumerTag("go-normalize-consumer"),
-		consumer.WorkerPoolSize(5),
+		consumer.WorkerPoolSize(intEnv("NORMALIZE_WORKERS", 1)),
 		consumer.WithLogger(appLogger),
 	)
 
@@ -114,6 +122,14 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	appLogger.Info("normalize shutting down")
+}
+
+func intEnv(name string, fallback int) int {
+	v, err := strconv.Atoi(os.Getenv(name))
+	if err != nil || v < 0 {
+		return fallback
+	}
+	return v
 }
 
 func runPendingSweep(ctx context.Context, svc *normuc.Service, log rabbitmq.Logger) {

@@ -10,8 +10,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	ndomain "medprice/internal/normalize/domain"
@@ -19,16 +21,18 @@ import (
 
 // Config is read from env in cmd/normalize.
 type Config struct {
-	BaseURL string  // e.g. https://api.deepseek.com
-	APIKey  string
-	Model   string  // e.g. deepseek-chat
-	MinConf float64 // accept suggestion only at/above this confidence
-	Timeout time.Duration
+	BaseURL   string // e.g. https://api.deepseek.com
+	APIKey    string
+	Model     string  // e.g. deepseek-chat
+	MinConf   float64 // accept suggestion only at/above this confidence
+	Timeout   time.Duration
+	MaxTokens int
 }
 
 type Client struct {
-	cfg  Config
-	http *http.Client
+	cfg      Config
+	http     *http.Client
+	disabled atomic.Bool
 }
 
 // New returns a client, or nil if the LLM is not configured (no key/base/model) —
@@ -40,7 +44,18 @@ func New(cfg Config) *Client {
 	if cfg.Timeout <= 0 {
 		cfg.Timeout = 20 * time.Second
 	}
+	if cfg.MaxTokens <= 0 {
+		cfg.MaxTokens = 120
+	}
 	return &Client{cfg: cfg, http: &http.Client{Timeout: cfg.Timeout}}
+}
+
+func (c *Client) Disabled() bool {
+	return c.disabled.Load()
+}
+
+func (c *Client) disable() {
+	c.disabled.Store(true)
 }
 
 // ---- OpenAI chat wire types ----
@@ -54,6 +69,7 @@ type chatRequest struct {
 	Model          string         `json:"model"`
 	Messages       []chatMessage  `json:"messages"`
 	Temperature    float64        `json:"temperature"`
+	MaxTokens      int            `json:"max_tokens,omitempty"`
 	ResponseFormat map[string]any `json:"response_format,omitempty"`
 }
 
@@ -61,24 +77,29 @@ type chatResponse struct {
 	Choices []struct {
 		Message chatMessage `json:"message"`
 	} `json:"choices"`
+	Error *struct {
+		Message string `json:"message"`
+		Type    string `json:"type"`
+		Code    any    `json:"code"`
+	} `json:"error,omitempty"`
 }
 
-const curateSystem = `Ты ведёшь справочник медицинских услуг. Тебе дают сырое название услуги
-с сайта клиники и список похожих канонических услуг из справочника. Реши: это та же
-услуга, что одна из них, или принципиально новая.
-
-Та же = тот же медицинский смысл (например "ОАК", "Общий анализ крови", "CBC",
-"Клинический анализ крови" — одна услуга). Разный объём/панель/комплекс = разные услуги.
-
-Категории строго одна из: лаборатория, прием врача, диагностика, процедура.
-
-Отвечай ТОЛЬКО JSON:
-{"match": true, "index": <номер из списка>, "confidence": <0..1>}
+const curateSystem = `Нормализуй медуслугу. Если raw = один из кандидатов по медицинскому смыслу — match.
+Синонимы/аббревиатуры считаются match; другой объём, панель или комплекс — новая услуга.
+Категория только: лаборатория, прием врача, диагностика, процедура.
+Ответ только JSON:
+{"match":true,"index":1,"confidence":0.9}
 или
-{"match": false, "canonical_name": "<чистое каноническое имя новой услуги>",
- "category": "<одна из категорий>",
- "description": "<1-2 предложения: что это за услуга, чтобы потом отличать от похожих>",
- "confidence": <0..1>}`
+{"match":false,"canonical_name":"...","category":"лаборатория","description":"кратко","confidence":0.9}`
+
+func trimForPrompt(s string, max int) string {
+	s = strings.TrimSpace(s)
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max])
+}
 
 // extractJSON returns the first {...} object in s (handles models that add prose or
 // ```json fences around the JSON). Falls back to the trimmed string.
@@ -95,25 +116,28 @@ func extractJSON(s string) string {
 func (c *Client) Curate(ctx context.Context, rawName, categoryHint string,
 	candidates []ndomain.CatalogEntry) (ndomain.CurateDecision, error) {
 	var zero ndomain.CurateDecision
+	if c.Disabled() {
+		return zero, ndomain.ErrLLMDisabled
+	}
 
 	var list strings.Builder
 	for i, e := range candidates {
 		desc := ""
 		if e.Description != nil && *e.Description != "" {
-			desc = " — " + *e.Description
+			desc = " — " + trimForPrompt(*e.Description, 80)
 		}
-		fmt.Fprintf(&list, "%d. %s [%s]%s\n", i+1, e.Name, e.Category, desc)
+		fmt.Fprintf(&list, "%d.%s[%s]%s\n", i+1, trimForPrompt(e.Name, 120), e.Category, desc)
 	}
 	hint := categoryHint
 	if hint == "" {
 		hint = "нет"
 	}
-	user := fmt.Sprintf("Сырое название:\n%q\nПодсказка категории от парсера: %s\n\n"+
-		"Похожие услуги справочника:\n%s", rawName, hint, list.String())
+	user := fmt.Sprintf("raw:%q\nhint:%s\ncandidates:\n%s", trimForPrompt(rawName, 180), hint, list.String())
 
 	reqBody := chatRequest{
 		Model:       c.cfg.Model,
 		Temperature: 0,
+		MaxTokens:   c.cfg.MaxTokens,
 		Messages: []chatMessage{
 			{Role: "system", Content: curateSystem},
 			{Role: "user", Content: user},
@@ -139,12 +163,34 @@ func (c *Client) Curate(ctx context.Context, rawName, categoryHint string,
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return zero, fmt.Errorf("llm http %d", resp.StatusCode)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		errText := strings.ToLower(string(body))
+		if resp.StatusCode == http.StatusTooManyRequests ||
+			resp.StatusCode == http.StatusPaymentRequired ||
+			strings.Contains(errText, "quota") ||
+			strings.Contains(errText, "insufficient") ||
+			strings.Contains(errText, "token") ||
+			strings.Contains(errText, "rate limit") {
+			c.disable()
+			return zero, fmt.Errorf("%w: http %d %s", ndomain.ErrLLMDisabled, resp.StatusCode, strings.TrimSpace(string(body)))
+		}
+		return zero, fmt.Errorf("llm http %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	var cr chatResponse
 	if err := json.NewDecoder(resp.Body).Decode(&cr); err != nil {
 		return zero, err
+	}
+	if cr.Error != nil {
+		msg := strings.ToLower(cr.Error.Message + " " + cr.Error.Type + " " + fmt.Sprint(cr.Error.Code))
+		if strings.Contains(msg, "quota") ||
+			strings.Contains(msg, "insufficient") ||
+			strings.Contains(msg, "token") ||
+			strings.Contains(msg, "rate limit") {
+			c.disable()
+			return zero, fmt.Errorf("%w: %s", ndomain.ErrLLMDisabled, cr.Error.Message)
+		}
+		return zero, fmt.Errorf("llm error: %s", cr.Error.Message)
 	}
 	if len(cr.Choices) == 0 {
 		return zero, fmt.Errorf("llm empty choices")
