@@ -14,8 +14,8 @@ from crawler.common import patterns as P
 from crawler.common.canonical import canonical_url
 from crawler.extract.category import OTHER, categorize
 from crawler.config import (ADAPTER_LISTING_ROW_THRESHOLD, DISCOVERY_CITY_SLUGS,
-                     DISCOVERY_SEED_TEMPLATES, JUNK_URL_PATTERNS, PRICE_KEYWORDS,
-                     get_logger)
+                     DISCOVERY_SEED_TEMPLATES, INVITRO_SEED_PATHS,
+                     JUNK_URL_PATTERNS, PRICE_KEYWORDS, get_logger)
 from crawler.routing.routes import host, route_template, template_to_glob
 
 log = get_logger(__name__)
@@ -138,7 +138,8 @@ class LinkAgent:
         self.follow_reasons: dict[str, int] = {}
         self._order = 0
         self.add(self.start_url, 0, 100.0, "start-url")
-        self._seed_generic_candidates()
+        if "invitro." not in self.domain:
+            self._seed_generic_candidates()
         self._seed_site_candidates()
 
     def add(self, url: str, depth: int, score: float, reason: str) -> bool:
@@ -188,10 +189,8 @@ class LinkAgent:
 
     def _seed_site_candidates(self) -> None:
         if "invitro." in self.domain:
-            for city in DISCOVERY_CITY_SLUGS:
-                for template in DISCOVERY_SEED_TEMPLATES:
-                    path = template.format(city=city)
-                    self.add(path, 1, 85.0, "seed-city-listing")
+            for path in INVITRO_SEED_PATHS:
+                self.add(path, 1, 88.0, "seed-invitro-catalog")
         if "kdlolymp." in self.domain:
             for city in DISCOVERY_CITY_SLUGS:
                 for path in (

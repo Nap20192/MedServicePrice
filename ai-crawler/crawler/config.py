@@ -113,6 +113,14 @@ DISCOVERY_SEED_TEMPLATES = [
     ).split(",")
     if s.strip()
 ]
+INVITRO_SEED_PATHS = [
+    s.strip()
+    for s in os.environ.get(
+        "INVITRO_SEED_PATHS",
+        "/analizes/for-doctors/,/analizes/profi/",
+    ).split(",")
+    if s.strip()
+]
 # Repeat runs auto-COLLECT (just gather from the saved adapter). Force a full
 # re-discovery (rebuild the adapter) with REDISCOVER=1.
 REDISCOVER = os.environ.get("REDISCOVER", "0") != "0"
@@ -217,6 +225,11 @@ LLM_CONCURRENCY = max(1, int(os.environ.get("LLM_CONCURRENCY", "5")))
 # LLM tool-calling discovery agent (opt-in). Drives a Playwright-MCP browser with
 # navigate/click/snapshot tools to build a richer adapter. Off by default — the
 # deterministic discovery path stays the default and is untouched.
+# Many KZ clinic/gov sites serve weak/misconfigured TLS certs. Default to NOT
+# verifying so discovery doesn't die on SSLCertVerificationError. Set VERIFY_SSL=1
+# to enforce verification.
+VERIFY_SSL = os.environ.get("VERIFY_SSL", "0") != "0"
+
 AGENT_LOOP = os.environ.get("AGENT_LOOP", "0") != "0" and bool(LLM_API_KEY)
 AGENT_MAX_STEPS = max(1, int(os.environ.get("AGENT_MAX_STEPS", "24")))
 AGENT_SNAPSHOT_CHARS = max(1000, int(os.environ.get("AGENT_SNAPSHOT_CHARS", "6000")))

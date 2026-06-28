@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { MedService } from '../types';
-import { formatPrice, formatParsedAt, isPriceStale, isOpenNow, categoryColors } from '../utils/format';
+import { formatPrice, formatParsedAt, isPriceStale, categoryColors } from '../utils/format';
 import { useComparison } from '../context/ComparisonContext';
 
 interface ServiceCardProps {
@@ -13,7 +13,6 @@ export default function ServiceCard({ service, showCity = false }: ServiceCardPr
   const { addItem, removeItem, isInComparison } = useComparison();
   const inComp = isInComparison(service.service_id);
   const stale = isPriceStale(service.parsed_at);
-  const open = isOpenNow(service.working_hours);
 
   const handleCompare = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -52,17 +51,11 @@ export default function ServiceCard({ service, showCity = false }: ServiceCardPr
                     {service.clinic_name}
                   </Link>
                 )}
-                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${open ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
-                    {open ? '● Открыто' : '● Закрыто'}
-                  </span>
-                  {showCity && (
+                {showCity && service.city && (
+                  <div className="mt-0.5">
                     <span className="text-xs text-slate-400">{service.city}</span>
-                  )}
-                  {service.online_booking && (
-                    <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">Онлайн-запись</span>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -71,22 +64,15 @@ export default function ServiceCard({ service, showCity = false }: ServiceCardPr
               <p className="font-medium text-slate-800 text-sm leading-snug">{service.service_name_norm}</p>
             </div>
 
-            {/* Tags row */}
+            {/* Category */}
             <div className="flex items-center gap-2 flex-wrap">
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${categoryColors[service.category] || 'bg-slate-100 text-slate-600'}`}>
                 {service.category}
               </span>
-              {service.duration_days !== null && (
-                <span className="inline-flex items-center gap-1 text-xs text-slate-500 bg-slate-50 px-2 py-0.5 rounded-full">
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  {service.duration_days === 1 ? '1 день' : `${service.duration_days} дня`}
-                </span>
-              )}
             </div>
 
             {/* Address */}
+            {service.address && (
             <p className="text-xs text-slate-400 mt-2 truncate">
               <svg className="w-3 h-3 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
@@ -94,6 +80,7 @@ export default function ServiceCard({ service, showCity = false }: ServiceCardPr
               </svg>
               {service.address}
             </p>
+            )}
           </div>
 
           {/* Price right */}

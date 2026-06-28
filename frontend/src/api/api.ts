@@ -215,6 +215,13 @@ export async function triggerSourceFetch(sourceId: string): Promise<SourceComman
   });
 }
 
+export async function rebuildSourceAdapter(sourceId: string): Promise<SourceCommandResult> {
+  return apiJson<SourceCommandResult>(`/sources/${sourceId}/adapter`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
 // ── БЭКЕНД-РЕЖИМ (раскомментировать при интеграции) ──────────
 //
 // import axios from 'axios';

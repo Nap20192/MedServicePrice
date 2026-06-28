@@ -53,6 +53,7 @@ func NewRouter(sourceUC domain.SourceUseCase, priceUC domain.PriceUseCase, sched
 		r.Post("/sources", sh.AddSource)
 		r.Get("/sources", sh.ListSources)
 		r.Post("/sources/{sourceID}/fetch", sh.TriggerFetch)
+		r.Post("/sources/{sourceID}/adapter", sh.RebuildAdapter)
 		r.Post("/clinics", sh.CreateClinic)
 		r.Get("/clinics", sh.ListClinics)
 		r.Get("/scheduler", sch.GetSettings)

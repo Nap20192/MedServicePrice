@@ -31,9 +31,9 @@ crawl:
     - /analizes/for-doctors/{city}
     - /analizes/profi/{city}
     - /{city}/radiology
-    - /{city}/analizes
-    - /{city}/services
-    - /pricelist/{city}
+  invitro_seed_paths:
+    - /analizes/for-doctors/
+    - /analizes/profi/
 
 browser:
   # Debug-only. When true, Playwright opens a visible browser window.

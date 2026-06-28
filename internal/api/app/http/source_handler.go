@@ -141,6 +141,29 @@ func (h *sourceHandler) TriggerFetch(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
+func (h *sourceHandler) RebuildAdapter(w http.ResponseWriter, r *http.Request) {
+	sourceID, err := uuid.Parse(chi.URLParam(r, "sourceID"))
+	if err != nil {
+		http.Error(w, "invalid source id", http.StatusBadRequest)
+		return
+	}
+
+	result, err := h.usecase.RebuildAdapter(r.Context(), sourceID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	resp := addSourceResponse{
+		Source:        result.Source,
+		Status:        statusForResult(result),
+		AdapterQueued: result.AdapterQueued,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
 type schedulerHandler struct {
 	usecase domain.SchedulerUseCase
 }

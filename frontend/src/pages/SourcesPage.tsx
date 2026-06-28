@@ -1,87 +1,42 @@
-import React, { FormEvent, useEffect, useMemo, useState } from 'react';
+import React, { FormEvent, useEffect, useState } from 'react';
 import {
-  createClinic,
   createSource,
   getSchedulerSettings,
-  listClinics,
   listSources,
+  rebuildSourceAdapter,
   triggerSourceFetch,
   updateSchedulerSettings,
 } from '../api/api';
-import { ClinicRecord, SourceDetails } from '../types';
-
-type SourceFormState = {
-  url: string;
-  fetch_now: boolean;
-};
-
-type ClinicFormState = {
-  name: string;
-  city: string;
-  address: string;
-  phone: string;
-  working_hours: string;
-  source_ids: string[];
-};
-
-const INITIAL_SOURCE: SourceFormState = {
-  url: '',
-  fetch_now: false,
-};
-
-const INITIAL_CLINIC: ClinicFormState = {
-  name: '',
-  city: '',
-  address: '',
-  phone: '',
-  working_hours: '',
-  source_ids: [],
-};
+import { SourceDetails } from '../types';
 
 function statusText(status: string) {
   switch (status) {
     case 'adapter_create_and_fetch_queued':
-      return 'Адаптер и парсинг поставлены в очередь';
+      return 'адаптер + парсинг в очереди';
     case 'adapter_create_queued':
-      return 'Создание адаптера поставлено в очередь';
+      return 'создание адаптера в очереди';
     case 'fetch_queued':
-      return 'Парсинг поставлен в очередь';
+      return 'парсинг в очереди';
     default:
-      return 'Источник уже существует';
+      return 'уже существует';
   }
-}
-
-function clinicTitle(source: SourceDetails) {
-  return source.clinic_name || 'Без клиники';
 }
 
 export default function SourcesPage() {
   const [sources, setSources] = useState<SourceDetails[]>([]);
-  const [clinics, setClinics] = useState<ClinicRecord[]>([]);
-  const [sourceForm, setSourceForm] = useState<SourceFormState>(INITIAL_SOURCE);
-  const [clinicForm, setClinicForm] = useState<ClinicFormState>(INITIAL_CLINIC);
+  const [urls, setUrls] = useState('');
+  const [fetchNow, setFetchNow] = useState(true);
   const [intervalHours, setIntervalHours] = useState(24);
   const [loading, setLoading] = useState(true);
-  const [savingSource, setSavingSource] = useState(false);
-  const [savingClinic, setSavingClinic] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [savingScheduler, setSavingScheduler] = useState(false);
-  const [runningId, setRunningId] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const unassignedSources = useMemo(
-    () => sources.filter((source) => !source.clinic_id),
-    [sources],
-  );
-
   const refresh = async () => {
-    const [sourceData, clinicData, scheduler] = await Promise.all([
-      listSources(),
-      listClinics(),
-      getSchedulerSettings(),
-    ]);
+    const [sourceData, scheduler] = await Promise.all([listSources(), getSchedulerSettings()]);
     setSources(sourceData);
-    setClinics(clinicData);
     setIntervalHours(scheduler.fetch_interval_hours);
   };
 
@@ -91,37 +46,27 @@ export default function SourcesPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const submitSource = async (event: FormEvent) => {
+  // Add one or many URLs at once (one per line). Clinics are linked later.
+  const submitUrls = async (event: FormEvent) => {
     event.preventDefault();
-    setSavingSource(true);
+    const list = urls.split('\n').map((u) => u.trim()).filter(Boolean);
+    if (list.length === 0) return;
+    setSaving(true);
     setError(null);
     setMessage(null);
     try {
-      const result = await createSource(sourceForm);
-      setMessage(statusText(result.status));
-      setSourceForm(INITIAL_SOURCE);
+      const results = await Promise.allSettled(
+        list.map((url) => createSource({ url, fetch_now: fetchNow })),
+      );
+      const ok = results.filter((r) => r.status === 'fulfilled').length;
+      const failed = results.length - ok;
+      setMessage(`Добавлено ${ok} URL${failed ? `, ошибок: ${failed}` : ''}`);
+      setUrls('');
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось сохранить URL');
+      setError(err instanceof Error ? err.message : 'Не удалось добавить URL');
     } finally {
-      setSavingSource(false);
-    }
-  };
-
-  const submitClinic = async (event: FormEvent) => {
-    event.preventDefault();
-    setSavingClinic(true);
-    setError(null);
-    setMessage(null);
-    try {
-      await createClinic(clinicForm);
-      setMessage('Клиника создана, выбранные URL привязаны');
-      setClinicForm(INITIAL_CLINIC);
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось создать клинику');
-    } finally {
-      setSavingClinic(false);
+      setSaving(false);
     }
   };
 
@@ -132,7 +77,7 @@ export default function SourcesPage() {
     try {
       const settings = await updateSchedulerSettings(intervalHours);
       setIntervalHours(settings.fetch_interval_hours);
-      setMessage(`Автозапуск парсинга: каждые ${settings.fetch_interval_hours} ч.`);
+      setMessage(`Автозапуск: каждые ${settings.fetch_interval_hours} ч.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось обновить scheduler');
     } finally {
@@ -140,36 +85,29 @@ export default function SourcesPage() {
     }
   };
 
-  const toggleSource = (sourceId: string) => {
-    setClinicForm((prev) => ({
-      ...prev,
-      source_ids: prev.source_ids.includes(sourceId)
-        ? prev.source_ids.filter((id) => id !== sourceId)
-        : [...prev.source_ids, sourceId],
-    }));
-  };
-
-  const runFetch = async (source: SourceDetails) => {
-    setRunningId(source.id);
+  const act = async (source: SourceDetails, fn: typeof triggerSourceFetch, ok: string) => {
+    setBusyId(source.id);
     setError(null);
     setMessage(null);
     try {
-      const result = await triggerSourceFetch(source.id);
-      setMessage(`${clinicTitle(source)}: ${statusText(result.status)}`);
+      const result = await fn(source.id);
+      setMessage(`${source.url}: ${ok} (${statusText(result.status)})`);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось запустить парсинг');
+      setError(err instanceof Error ? err.message : 'Ошибка');
     } finally {
-      setRunningId(null);
+      setBusyId(null);
     }
   };
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-900">Источники и клиники</h1>
-          <p className="text-sm text-slate-500 mt-1">URL добавляются отдельно, клиники связываются с ними при создании.</p>
+          <h1 className="text-2xl font-bold text-slate-900">Источники</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Добавьте URL прайсов — краулер сам построит адаптер и соберёт цены. Клиники привязываются позже.
+          </p>
         </div>
 
         {(message || error) && (
@@ -178,168 +116,115 @@ export default function SourcesPage() {
           </div>
         )}
 
-        <section className="bg-white border border-slate-100 rounded-xl shadow-sm p-5 mb-6">
-          <div className="flex flex-col md:flex-row md:items-end gap-4 justify-between">
-            <div>
-              <h2 className="font-semibold text-slate-800">Автозапуск парсинга</h2>
-              <p className="text-sm text-slate-500 mt-1">API scheduler запускает fetch для всех URL по заданному интервалу.</p>
-            </div>
-            <div className="flex items-end gap-3">
-              <label className="block">
-                <span className="block text-xs font-medium text-slate-500 uppercase mb-1">Интервал, часов</span>
-                <input
-                  value={intervalHours}
-                  min={1}
-                  type="number"
-                  onChange={(e) => setIntervalHours(Number(e.target.value))}
-                  className="w-32 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
-                />
-              </label>
-              <button
-                type="button"
-                disabled={savingScheduler || intervalHours < 1}
-                onClick={saveScheduler}
-                className="bg-slate-900 hover:bg-slate-700 disabled:bg-slate-300 text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors"
-              >
-                {savingScheduler ? 'Сохранение...' : 'Сохранить'}
-              </button>
-            </div>
+        {/* Add URLs */}
+        <form onSubmit={submitUrls} className="bg-white border border-slate-100 rounded-xl shadow-sm p-5 space-y-4 mb-6">
+          <h2 className="font-semibold text-slate-800">Добавить URL</h2>
+          <textarea
+            value={urls}
+            onChange={(e) => setUrls(e.target.value)}
+            required
+            rows={4}
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-teal-400"
+            placeholder={'https://invitro.kz\nhttps://kdlolymp.kz\nhttps://example.kz/prices'}
+          />
+          <div className="flex items-center justify-between gap-3">
+            <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={fetchNow}
+                onChange={(e) => setFetchNow(e.target.checked)}
+                className="w-4 h-4 accent-teal-500"
+              />
+              Сразу запустить парсинг
+            </label>
+            <button
+              type="submit"
+              disabled={saving}
+              className="bg-teal-500 hover:bg-teal-600 disabled:bg-slate-300 text-white font-medium rounded-lg px-5 py-2 transition-colors"
+            >
+              {saving ? 'Добавление...' : 'Добавить'}
+            </button>
+          </div>
+          <p className="text-xs text-slate-400">По одному URL на строку — можно добавить сразу несколько.</p>
+        </form>
+
+        {/* Scheduler */}
+        <section className="bg-white border border-slate-100 rounded-xl shadow-sm p-5 mb-6 flex flex-col sm:flex-row sm:items-end gap-4 justify-between">
+          <div>
+            <h2 className="font-semibold text-slate-800">Автозапуск парсинга</h2>
+            <p className="text-sm text-slate-500 mt-1">Scheduler запускает fetch всех источников по интервалу.</p>
+          </div>
+          <div className="flex items-end gap-3">
+            <label className="block">
+              <span className="block text-xs font-medium text-slate-500 uppercase mb-1">Интервал, часов</span>
+              <input
+                value={intervalHours}
+                min={1}
+                type="number"
+                onChange={(e) => setIntervalHours(Number(e.target.value))}
+                className="w-28 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+              />
+            </label>
+            <button
+              type="button"
+              disabled={savingScheduler || intervalHours < 1}
+              onClick={saveScheduler}
+              className="bg-slate-900 hover:bg-slate-700 disabled:bg-slate-300 text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors"
+            >
+              {savingScheduler ? '...' : 'Сохранить'}
+            </button>
           </div>
         </section>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6 items-start">
-          <div className="space-y-6">
-            <form onSubmit={submitSource} className="bg-white border border-slate-100 rounded-xl shadow-sm p-5 space-y-4">
-              <h2 className="font-semibold text-slate-800">Добавить URL</h2>
-              <div>
-                <label className="block text-xs font-medium text-slate-500 uppercase mb-1">URL прайса или сайта</label>
-                <input
-                  value={sourceForm.url}
-                  onChange={(e) => setSourceForm((prev) => ({ ...prev, url: e.target.value }))}
-                  required
-                  type="url"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
-                  placeholder="https://example.kz/prices"
-                />
-              </div>
-              <label className="flex items-center justify-between gap-3 text-sm text-slate-600 cursor-pointer">
-                <span>Сразу запустить парсинг</span>
-                <input
-                  type="checkbox"
-                  checked={sourceForm.fetch_now}
-                  onChange={(e) => setSourceForm((prev) => ({ ...prev, fetch_now: e.target.checked }))}
-                  className="w-4 h-4 accent-teal-500"
-                />
-              </label>
-              <button
-                type="submit"
-                disabled={savingSource}
-                className="w-full bg-teal-500 hover:bg-teal-600 disabled:bg-slate-300 text-white font-medium rounded-lg px-4 py-2.5 transition-colors"
-              >
-                {savingSource ? 'Сохранение...' : 'Добавить URL'}
-              </button>
-            </form>
-
-            <form onSubmit={submitClinic} className="bg-white border border-slate-100 rounded-xl shadow-sm p-5 space-y-4">
-              <h2 className="font-semibold text-slate-800">Создать клинику</h2>
-              <input value={clinicForm.name} onChange={(e) => setClinicForm((prev) => ({ ...prev, name: e.target.value }))} required className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" placeholder="Название клиники" />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <input value={clinicForm.city} onChange={(e) => setClinicForm((prev) => ({ ...prev, city: e.target.value }))} className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" placeholder="Город" />
-                <input value={clinicForm.phone} onChange={(e) => setClinicForm((prev) => ({ ...prev, phone: e.target.value }))} className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" placeholder="Телефон" />
-              </div>
-              <input value={clinicForm.address} onChange={(e) => setClinicForm((prev) => ({ ...prev, address: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" placeholder="Адрес" />
-              <input value={clinicForm.working_hours} onChange={(e) => setClinicForm((prev) => ({ ...prev, working_hours: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" placeholder="09:00-18:00" />
-
-              <div>
-                <div className="text-xs font-medium text-slate-500 uppercase mb-2">Привязать URL</div>
-                <div className="max-h-40 overflow-y-auto border border-slate-100 rounded-lg divide-y divide-slate-100">
-                  {unassignedSources.length === 0 ? (
-                    <div className="px-3 py-3 text-sm text-slate-400">Нет свободных URL</div>
-                  ) : unassignedSources.map((source) => (
-                    <label key={source.id} className="flex items-start gap-3 px-3 py-2 text-sm cursor-pointer hover:bg-slate-50">
-                      <input
-                        type="checkbox"
-                        checked={clinicForm.source_ids.includes(source.id)}
-                        onChange={() => toggleSource(source.id)}
-                        className="mt-1 w-4 h-4 accent-teal-500"
-                      />
-                      <span className="break-all text-slate-600">{source.url}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={savingClinic}
-                className="w-full bg-slate-900 hover:bg-slate-700 disabled:bg-slate-300 text-white font-medium rounded-lg px-4 py-2.5 transition-colors"
-              >
-                {savingClinic ? 'Создание...' : 'Создать клинику'}
-              </button>
-            </form>
+        {/* Sources list */}
+        <div className="bg-white border border-slate-100 rounded-xl shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+            <h2 className="font-semibold text-slate-800">Источники</h2>
+            <span className="text-xs text-slate-400">{sources.length}</span>
           </div>
-
-          <div className="space-y-6">
-            <div className="bg-white border border-slate-100 rounded-xl shadow-sm overflow-hidden">
-              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-                <h2 className="font-semibold text-slate-800">URL источники</h2>
-                <span className="text-xs text-slate-400">{sources.length}</span>
-              </div>
-              {loading ? (
-                <div className="p-8 text-center text-slate-400 text-sm">Загрузка...</div>
-              ) : sources.length === 0 ? (
-                <div className="p-8 text-center text-slate-400 text-sm">URL пока нет</div>
-              ) : (
-                <div className="divide-y divide-slate-100">
-                  {sources.map((source) => (
-                    <div key={source.id} className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="font-semibold text-slate-800">{clinicTitle(source)}</h3>
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${source.adapter_id ? 'bg-teal-50 text-teal-700' : 'bg-amber-50 text-amber-700'}`}>
-                            {source.adapter_id ? 'adapter ready' : 'adapter pending'}
-                          </span>
-                          {!source.clinic_id && <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">free URL</span>}
-                        </div>
-                        <p className="text-sm text-slate-500 break-all mt-1">{source.url}</p>
-                        <p className="text-xs text-slate-400 mt-1">
-                          {[source.city, source.address, source.phone].filter(Boolean).join(' · ') || 'Без данных клиники'}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => runFetch(source)}
-                        disabled={runningId === source.id}
-                        className="shrink-0 bg-slate-900 hover:bg-slate-700 disabled:bg-slate-300 text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors"
-                      >
-                        {runningId === source.id ? 'Запуск...' : 'Fetch'}
-                      </button>
+          {loading ? (
+            <div className="p-8 text-center text-slate-400 text-sm">Загрузка...</div>
+          ) : sources.length === 0 ? (
+            <div className="p-8 text-center text-slate-400 text-sm">Источников пока нет</div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {sources.map((source) => (
+                <div key={source.id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${source.adapter_id ? 'bg-teal-50 text-teal-700' : 'bg-amber-50 text-amber-700'}`}>
+                        {source.adapter_id ? 'adapter ready' : 'adapter pending'}
+                      </span>
+                      {source.clinic_name ? (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{source.clinic_name}</span>
+                      ) : (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-400">без клиники</span>
+                      )}
+                      {source.city && <span className="text-xs text-slate-400">{source.city}</span>}
                     </div>
-                  ))}
+                    <p className="text-sm text-slate-600 break-all mt-1">{source.url}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => act(source, rebuildSourceAdapter, 'адаптер обновляется')}
+                      disabled={busyId === source.id}
+                      title="Перестроить адаптер (rediscover)"
+                      className="border border-slate-200 hover:bg-slate-50 disabled:opacity-50 text-slate-600 text-sm font-medium rounded-lg px-3 py-2 transition-colors"
+                    >
+                      ↻ Адаптер
+                    </button>
+                    <button
+                      onClick={() => act(source, triggerSourceFetch, 'парсинг запущен')}
+                      disabled={busyId === source.id}
+                      className="bg-slate-900 hover:bg-slate-700 disabled:bg-slate-300 text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors"
+                    >
+                      {busyId === source.id ? '...' : 'Fetch'}
+                    </button>
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
-
-            <div className="bg-white border border-slate-100 rounded-xl shadow-sm overflow-hidden">
-              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-                <h2 className="font-semibold text-slate-800">Клиники</h2>
-                <span className="text-xs text-slate-400">{clinics.length}</span>
-              </div>
-              {clinics.length === 0 ? (
-                <div className="p-8 text-center text-slate-400 text-sm">Клиник пока нет</div>
-              ) : (
-                <div className="divide-y divide-slate-100">
-                  {clinics.map((clinic) => (
-                    <div key={clinic.id} className="p-5">
-                      <h3 className="font-semibold text-slate-800">{clinic.name}</h3>
-                      <p className="text-xs text-slate-400 mt-1">
-                        {[clinic.city, clinic.address, clinic.phone].filter(Boolean).join(' · ') || 'Без дополнительных данных'}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

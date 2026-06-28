@@ -7,8 +7,8 @@ harvest layer's job.
 """
 from collections.abc import AsyncIterator
 from crawl4ai import (AsyncWebCrawler, BestFirstCrawlingStrategy, BrowserConfig,
-                      CacheMode, CrawlerRunConfig, KeywordRelevanceScorer,
-                      LXMLWebScrapingStrategy)
+                      CacheMode, CrawlerRunConfig, HTTPCrawlerConfig,
+                      KeywordRelevanceScorer, LXMLWebScrapingStrategy)
 from crawl4ai.async_crawler_strategy import AsyncHTTPCrawlerStrategy
 from crawl4ai.deep_crawling.filters import FilterChain, URLPatternFilter
 
@@ -16,7 +16,7 @@ from crawler.common import patterns as P
 from crawler.config import (BROWSER_DISABLE_GPU, BROWSER_EXTRA_ARGS, BROWSER_HEADLESS,
                      BROWSER_VERBOSE, CONCURRENCY, CRAWL_MODE, ESCALATE,
                      FETCH_CONCURRENCY, JUNK_URL_PATTERNS, MAX_DEPTH, MAX_PAGES,
-                     PAGE_TIMEOUT_MS, PRICE_KEYWORDS, get_logger)
+                     PAGE_TIMEOUT_MS, PRICE_KEYWORDS, VERIFY_SSL, get_logger)
 from crawler.common.models import Page
 
 log = get_logger(__name__)
@@ -37,7 +37,7 @@ def _browser_config() -> BrowserConfig:
     log.debug("browser config headless=%s verbose=%s extra_args=%d",
               BROWSER_HEADLESS, BROWSER_VERBOSE, len(extra_args))
     return BrowserConfig(headless=BROWSER_HEADLESS, verbose=BROWSER_VERBOSE,
-                         extra_args=extra_args)
+                         extra_args=extra_args, ignore_https_errors=not VERIFY_SSL)
 _LIGHT = dict(
     scraping_strategy=_SCRAPER,
     excluded_tags=["script", "style", "noscript", "svg", "iframe", "form",
@@ -98,7 +98,10 @@ def _needs_browser(page: Page) -> bool:
 
 
 def _http_strategy():
-    return AsyncHTTPCrawlerStrategy() if CRAWL_MODE == "http" else None
+    if CRAWL_MODE != "http":
+        return None
+    # verify_ssl=False: KZ med sites often have weak/expired certs (helix.kz etc.).
+    return AsyncHTTPCrawlerStrategy(browser_config=HTTPCrawlerConfig(verify_ssl=VERIFY_SSL))
 
 
 def _deep_cfg(blocked: list[str]):
@@ -184,6 +187,16 @@ class URLFetcher:
                      page.status, page.success, len(page.html), len(page.md), page.url,
                      err, _preview(page.md))
             if not page.success:
-                log.warning("http failed transport=%s status=%s url=%s error=%s",
-                            transport, page.status, page.url, err or "unknown")
+                status = page.status or _status_from_error(err)
+                if status == 404:
+                    log.debug("http 404 transport=%s url=%s", transport, page.url)
+                else:
+                    log.warning("http failed transport=%s status=%s url=%s error=%s",
+                                transport, page.status, page.url, err or "unknown")
             yield page
+
+
+def _status_from_error(err: str) -> int | None:
+    if "HTTP 404" in (err or ""):
+        return 404
+    return None

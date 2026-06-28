@@ -158,6 +158,29 @@ func (uc *sourceUC) TriggerFetchAll(ctx context.Context, trigger string) (int, e
 	return queued, nil
 }
 
+// RebuildAdapter re-runs discovery for a source: publishes adapter.create with
+// rediscover=true so the worker rebuilds (not just reuses) the adapter.
+func (uc *sourceUC) RebuildAdapter(ctx context.Context, sourceID uuid.UUID) (*domain.SourceCommandResult, error) {
+	details, err := uc.sourceRepo.GetSourceByID(ctx, sourceID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load source: %w", err)
+	}
+	if details == nil {
+		return nil, fmt.Errorf("source %s not found", sourceID)
+	}
+
+	event := uc.adapterEventBase(details)
+	event["created_at"] = time.Now().UTC().Format(time.RFC3339)
+	if cfg, ok := event["config"].(map[string]any); ok {
+		cfg["rediscover"] = true
+	}
+	if err := uc.publisher.PublishEvent(ctx, "adapter.create", event); err != nil {
+		return nil, fmt.Errorf("failed to publish adapter.create event: %w", err)
+	}
+
+	return &domain.SourceCommandResult{Source: details, AdapterQueued: true}, nil
+}
+
 func (uc *sourceUC) buildResult(ctx context.Context, sourceID uuid.UUID) (*domain.SourceCommandResult, error) {
 	details, err := uc.sourceRepo.GetSourceByID(ctx, sourceID)
 	if err != nil {

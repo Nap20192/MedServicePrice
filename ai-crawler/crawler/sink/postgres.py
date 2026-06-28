@@ -18,12 +18,13 @@ _DEACTIVATE = "UPDATE parsed_services SET is_active = false WHERE source_id = $1
 
 _UPSERT = """
 INSERT INTO parsed_services
-    (source_id, service_name_raw, price_kzt, currency, duration_days, parsed_at, is_active)
-VALUES ($1, $2, $3, $4::currency_enum, $5, now(), true)
+    (source_id, service_name_raw, price_kzt, currency, duration_days, category, parsed_at, is_active)
+VALUES ($1, $2, $3, $4::currency_enum, $5, $6, now(), true)
 ON CONFLICT (source_id, service_name_raw) DO UPDATE SET
     price_kzt     = EXCLUDED.price_kzt,
     currency      = EXCLUDED.currency,
     duration_days = EXCLUDED.duration_days,
+    category      = EXCLUDED.category,
     parsed_at     = now(),
     is_active     = true
 -- service_catalog_id intentionally left untouched: normalize owns it.
@@ -70,6 +71,7 @@ class PostgresSink:
                 price,
                 DEFAULT_CURRENCY,
                 int(duration) if duration is not None else None,
+                (rec.get("category") or "").strip() or None,
             )
         return list(by_name.values())
 

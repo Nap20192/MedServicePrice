@@ -34,6 +34,7 @@ type SourceUseCase interface {
 	ListClinics(ctx context.Context) ([]Clinic, error)
 	TriggerFetch(ctx context.Context, sourceID uuid.UUID) (*SourceCommandResult, error)
 	TriggerFetchAll(ctx context.Context, trigger string) (int, error)
+	RebuildAdapter(ctx context.Context, sourceID uuid.UUID) (*SourceCommandResult, error)
 }
 
 type SchedulerUseCase interface {
