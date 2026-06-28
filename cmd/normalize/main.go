@@ -10,18 +10,47 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/joho/godotenv"
 	"golang.org/x/exp/slog"
 
 	normapp "medprice/internal/normalize/app"
+	"medprice/internal/normalize/domain"
+	"medprice/internal/normalize/llm"
 	normpg "medprice/internal/normalize/repository/postgres"
 	normuc "medprice/internal/normalize/usecase"
 	"medprice/internal/platform/database"
 	"medprice/pkg/rabbitmq"
 	"medprice/pkg/rabbitmq/consumer"
 )
+
+// buildLLM returns an LLM matcher from env, or nil if not configured.
+func buildLLM(log rabbitmq.Logger) domain.LLMMatcher {
+	minConf := 0.7
+	if v, err := strconv.ParseFloat(os.Getenv("LLM_MIN_CONFIDENCE"), 64); err == nil {
+		minConf = v
+	}
+	timeout := 20 * time.Second
+	if v, err := strconv.Atoi(os.Getenv("LLM_TIMEOUT_S")); err == nil && v > 0 {
+		timeout = time.Duration(v) * time.Second
+	}
+	c := llm.New(llm.Config{
+		BaseURL: os.Getenv("LLM_BASE_URL"),
+		APIKey:  os.Getenv("LLM_API_KEY"),
+		Model:   os.Getenv("LLM_MODEL"),
+		MinConf: minConf,
+		Timeout: timeout,
+	})
+	if c == nil {
+		log.Info("LLM fallback disabled (set LLM_BASE_URL/LLM_API_KEY/LLM_MODEL to enable)")
+		return nil
+	}
+	log.Info("LLM fallback enabled", "model", os.Getenv("LLM_MODEL"), "min_confidence", minConf)
+	return c
+}
 
 type slogWrapper struct{ l *slog.Logger }
 
@@ -60,7 +89,7 @@ func main() {
 	defer conn.Close()
 
 	repo := normpg.NewRepository(db)
-	svc := normuc.NewService(repo, appLogger)
+	svc := normuc.NewService(repo, buildLLM(appLogger), appLogger)
 	cons := normapp.NewConsumer(svc, appLogger)
 
 	c := consumer.NewConsumer(conn).Configure(

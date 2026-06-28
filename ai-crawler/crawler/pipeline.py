@@ -10,11 +10,13 @@ import time
 from datetime import datetime, timezone
 
 from crawler.adapter.mcp_explorer import explore_with_mcp
+from crawler.adapter.agent_loop import run_agent_loop
 from crawler.adapter.adapter import (SiteAdapter, build_fetch_instructions, build_fetch_plan,
                       build_page_groups, compact_data_urls)
 from crawler.common.canonical import canonical_url
 from crawler.fetch.collector import collect
-from crawler.config import REDISCOVER, WRITE_DISCOVERY_OUTPUT, get_logger
+from crawler.fetch.api_fetch import fetch_api_rows
+from crawler.config import AGENT_LOOP, REDISCOVER, WRITE_DISCOVERY_OUTPUT, get_logger
 from crawler.discovery.harvest import discover
 from crawler.output.output import write_rows
 from crawler.extract.record import OUTPUT_SCHEMA, clean_records
@@ -148,6 +150,24 @@ async def create_or_update_adapter(start_url: str) -> SiteAdapter:
                  domain, before, len(store.data_urls), len(adapter.data_urls),
                  len(getattr(store, "url_nodes", {})), len(adapter.page_groups),
                  len(adapter.fetch_plan.browser_urls if adapter.fetch_plan else []))
+    # Optional LLM tool-calling agent: drive a browser (navigate/click/snapshot) to
+    # find price pages hidden behind tabs/buttons and any JSON price endpoints, then
+    # enrich the adapter with those URLs + the interaction steps to replay them.
+    if AGENT_LOOP:
+        agent = await run_agent_loop(start_url)
+        if agent.enabled and agent.status == "ok":
+            if agent.data_urls:
+                adapter.data_urls = sorted(
+                    {canonical_url(u) for u in adapter.data_urls}
+                    | {canonical_url(u) for u in agent.data_urls})
+                _refresh_adapter_urls(adapter, store)
+            adapter.interaction_steps = agent.interactions
+            adapter.network_endpoints = agent.network_endpoints
+            adapter.agent_trace = agent.to_dict()
+            log.info("agent enriched adapter domain=%s agent_data_urls=%d interactions=%d endpoints=%d "
+                     "total_data_urls=%d", domain, len(agent.data_urls), len(agent.interactions),
+                     len(agent.network_endpoints), len(adapter.data_urls))
+
     adapter.save()
     store.set_data_urls(adapter.data_urls)
     store.save()
@@ -181,14 +201,29 @@ async def fetch(start_url: str, sink: Sink | None = None) -> int:
         return 0
 
     adapter.fetch_plan = build_fetch_plan(adapter.data_urls, adapter.url_nodes)  # HTTP-first, no network
-    browser_urls = adapter.fetch_plan.browser_urls if adapter.fetch_plan else []
-    log.info("fetch started domain=%s data_urls=%d browser_urls=%d method=%s",
-             domain, len(adapter.data_urls), len(browser_urls), adapter.method)
+    browser_urls = list(adapter.fetch_plan.browser_urls if adapter.fetch_plan else [])
+    # Agent fix B: pages the discovery agent had to interact with (click a tab/city/
+    # "show prices") load data via JS — force a browser so that data renders.
+    if adapter.interaction_steps:
+        inter = {canonical_url(s.get("on_url")) for s in adapter.interaction_steps if s.get("on_url")}
+        browser_urls = sorted(set(browser_urls) | inter)
+    log.info("fetch started domain=%s data_urls=%d browser_urls=%d endpoints=%d method=%s",
+             domain, len(adapter.data_urls), len(browser_urls), len(adapter.network_endpoints),
+             adapter.method)
     rows, stats, store = await collect(domain, adapter.data_urls, browser_urls=browser_urls)
     store.save()
+
+    # Agent fix A: pull the JSON/XHR price endpoints the agent found — cheaper and
+    # cleaner than HTML — and merge their rows in before normalization.
+    api_rows: list[dict] = []
+    if adapter.network_endpoints:
+        api_rows = await fetch_api_rows(adapter.network_endpoints, domain)
+        log.info("api endpoints fetched domain=%s endpoints=%d api_rows=%d",
+                 domain, len(adapter.network_endpoints), len(api_rows))
+
     if sink is None:
         sink = JsonlSink()
-    records = clean_records(rows, OUTPUT_SCHEMA, adapter.fetch_instructions)
+    records = clean_records(rows + api_rows, OUTPUT_SCHEMA, adapter.fetch_instructions)
     n = await sink.emit(records, domain=domain)
     adapter.run_info["last_fetch"] = {
         "command": "fetch",
@@ -200,7 +235,8 @@ async def fetch(start_url: str, sink: Sink | None = None) -> int:
         "pages": stats["pages"],
         "pages_with_prices": stats["with_prices"],
         "invalid_routes": stats["invalid"],
-        "rows_extracted": len(rows),
+        "rows_extracted": len(rows) + len(api_rows),
+        "api_rows": len(api_rows),
         "prices_written": n,
     }
     adapter.save()

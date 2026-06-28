@@ -87,9 +87,34 @@ func (r *repository) Match(ctx context.Context, rawName string) (uuid.UUID, stri
 	return uuid.Nil, ndomain.MatchNone, err
 }
 
+func (r *repository) ListCatalog(ctx context.Context) ([]ndomain.CatalogEntry, error) {
+	var rows []ndomain.CatalogEntry
+	if err := r.db.SelectContext(ctx, &rows,
+		`SELECT id, name_norm, category FROM services_catalog ORDER BY name_norm`); err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// AddAlias records a learned synonym. alias_key is generated; a clash (same key
+// already mapped) is ignored so concurrent/duplicate learning is harmless.
+func (r *repository) AddAlias(ctx context.Context, catalogID uuid.UUID, aliasText, origin string) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO service_aliases (service_catalog_id, alias_text, origin)
+		 VALUES ($1, $2, $3) ON CONFLICT (alias_key) DO NOTHING`,
+		catalogID, aliasText, origin)
+	return err
+}
+
 func (r *repository) BindParsed(ctx context.Context, rowID, catalogID uuid.UUID) error {
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE parsed_services SET service_catalog_id = $1 WHERE id = $2`, catalogID, rowID)
+	return err
+}
+
+func (r *repository) MarkNormalized(ctx context.Context, sourceID uuid.UUID) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE parsed_services SET normalized_at = now() WHERE source_id = $1 AND is_active`, sourceID)
 	return err
 }
 

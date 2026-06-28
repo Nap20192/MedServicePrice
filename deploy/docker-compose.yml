@@ -99,6 +99,11 @@ services:
     environment:
       DATABASE_URL: ${API_DATABASE_URL}
       RABBITMQ_URL: ${API_RABBITMQ_URL}
+      LLM_BASE_URL: ${LLM_BASE_URL}
+      LLM_API_KEY: ${LLM_API_KEY}
+      LLM_MODEL: ${LLM_MODEL}
+      LLM_MIN_CONFIDENCE: ${LLM_MIN_CONFIDENCE}
+      LLM_TIMEOUT_S: ${LLM_TIMEOUT_S}
 
   frontend:
     build:

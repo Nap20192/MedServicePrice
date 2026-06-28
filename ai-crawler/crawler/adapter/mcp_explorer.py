@@ -55,6 +55,10 @@ class _MCPStdioClient:
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            # Snapshots/network dumps of big price pages are one huge JSON-RPC line;
+            # the default 64 KiB StreamReader limit makes readline() raise
+            # "Separator is not found, and chunk exceed the limit". Allow 32 MiB.
+            limit=32 * 1024 * 1024,
         )
         await self.request("initialize", {
             "protocolVersion": "2024-11-05",

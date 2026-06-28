@@ -213,6 +213,13 @@ LLM_API_KEY = (
 )
 LLM_SCHEMA_GEN = os.environ.get("LLM_SCHEMA_GEN", "1") != "0" and bool(LLM_API_KEY)
 LLM_CONCURRENCY = max(1, int(os.environ.get("LLM_CONCURRENCY", "5")))
+
+# LLM tool-calling discovery agent (opt-in). Drives a Playwright-MCP browser with
+# navigate/click/snapshot tools to build a richer adapter. Off by default — the
+# deterministic discovery path stays the default and is untouched.
+AGENT_LOOP = os.environ.get("AGENT_LOOP", "0") != "0" and bool(LLM_API_KEY)
+AGENT_MAX_STEPS = max(1, int(os.environ.get("AGENT_MAX_STEPS", "24")))
+AGENT_SNAPSHOT_CHARS = max(1000, int(os.environ.get("AGENT_SNAPSHOT_CHARS", "6000")))
 # LLM schema induction is the slow last resort: cap calls per domain per run so a
 # site with many distinct page structures cannot trigger dozens of ~90s LLM calls.
 SCHEMA_GEN_MAX_PER_DOMAIN = max(0, int(os.environ.get("SCHEMA_GEN_MAX_PER_DOMAIN", "2")))

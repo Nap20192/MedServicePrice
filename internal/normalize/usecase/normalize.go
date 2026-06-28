@@ -16,11 +16,13 @@ import (
 
 type Service struct {
 	repo ndomain.Repository
+	llm  ndomain.LLMMatcher // optional; nil = LLM fallback disabled
 	log  rabbitmq.Logger
 }
 
-func NewService(repo ndomain.Repository, log rabbitmq.Logger) *Service {
-	return &Service{repo: repo, log: log}
+// NewService wires the normalize usecase. llm may be nil (deterministic matching only).
+func NewService(repo ndomain.Repository, llm ndomain.LLMMatcher, log rabbitmq.Logger) *Service {
+	return &Service{repo: repo, llm: llm, log: log}
 }
 
 // ProcessParseCompleted normalizes one source end-to-end: every active raw row is
@@ -52,6 +54,14 @@ func (s *Service) ProcessParseCompleted(ctx context.Context, body []byte) error 
 		return errors.Wrap(err, "load active rows")
 	}
 
+	// Catalog snapshot for the LLM prompt — loaded once, only if LLM is enabled.
+	var catalog []ndomain.CatalogEntry
+	if s.llm != nil {
+		if catalog, err = s.repo.ListCatalog(ctx); err != nil {
+			return errors.Wrap(err, "list catalog")
+		}
+	}
+
 	// Dedup raw rows that collapse to the same catalog service: keep the cheapest.
 	offers := make(map[uuid.UUID]ndomain.Offer)
 	matched, unmatched := 0, 0
@@ -60,6 +70,21 @@ func (s *Service) ProcessParseCompleted(ctx context.Context, body []byte) error 
 		if err != nil {
 			return errors.Wrapf(err, "match %q", row.Name)
 		}
+
+		// Deterministic miss → LLM fallback (best-effort). A hit is learned as an
+		// alias so the next fetch matches without the LLM.
+		if catalogID == uuid.Nil && s.llm != nil {
+			if id, conf, lerr := s.llm.Suggest(ctx, row.Name, catalog); lerr != nil {
+				s.log.Error("llm suggest failed", "raw", row.Name, "err", lerr)
+			} else if id != uuid.Nil {
+				if aerr := s.repo.AddAlias(ctx, id, row.Name, "llm"); aerr != nil {
+					return errors.Wrap(aerr, "add llm alias")
+				}
+				catalogID, method = id, ndomain.MatchLLM
+				s.log.Info("llm matched", "raw", row.Name, "confidence", conf)
+			}
+		}
+
 		if catalogID == uuid.Nil {
 			unmatched++
 			if err := s.repo.RecordUnmatched(ctx, sourceID, row.Name); err != nil {
@@ -90,6 +115,11 @@ func (s *Service) ProcessParseCompleted(ctx context.Context, body []byte) error 
 	}
 	if err := s.repo.PublishOffers(ctx, sourceID, city, list); err != nil {
 		return errors.Wrap(err, "publish offers")
+	}
+
+	// Stamp the raw layer: these rows have now been seen by normalize.
+	if err := s.repo.MarkNormalized(ctx, sourceID); err != nil {
+		return errors.Wrap(err, "mark normalized")
 	}
 
 	s.log.Info("normalize completed",

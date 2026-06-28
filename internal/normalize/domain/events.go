@@ -42,8 +42,23 @@ const (
 	MatchAlias   = "alias"
 	MatchCatalog = "catalog"
 	MatchFuzzy   = "fuzzy"
+	MatchLLM     = "llm"
 	MatchNone    = "none"
 )
+
+// CatalogEntry is one справочник row, used to prompt the LLM matcher.
+type CatalogEntry struct {
+	ID       uuid.UUID `db:"id"`
+	Name     string    `db:"name_norm"`
+	Category string    `db:"category"`
+}
+
+// LLMMatcher suggests a catalog id for a raw name that deterministic matching
+// missed. Returns uuid.Nil if no entry fits. Best-effort: errors must not fail
+// the whole batch (caller falls back to the unmatched queue).
+type LLMMatcher interface {
+	Suggest(ctx context.Context, rawName string, catalog []CatalogEntry) (uuid.UUID, float64, error)
+}
 
 // Repository is the persistence port the usecase depends on. The normalize
 // service is the only reader of parsed_services (raw); it publishes into
@@ -59,8 +74,15 @@ type Repository interface {
 	Match(ctx context.Context, rawName string) (uuid.UUID, string, error)
 	// BindParsed links a raw row to its catalog id (traceability in the raw layer).
 	BindParsed(ctx context.Context, rowID, catalogID uuid.UUID) error
+	// MarkNormalized stamps normalized_at on every active row of a source, so the
+	// raw layer records that normalize has seen them (matched or not).
+	MarkNormalized(ctx context.Context, sourceID uuid.UUID) error
 	// RecordUnmatched upserts a miss into the review queue.
 	RecordUnmatched(ctx context.Context, sourceID uuid.UUID, rawName string) error
 	// PublishOffers atomically rebuilds the source's live gold offers, stamped with city.
 	PublishOffers(ctx context.Context, sourceID uuid.UUID, city *string, offers []Offer) error
+	// ListCatalog returns all catalog entries (for the LLM prompt).
+	ListCatalog(ctx context.Context) ([]CatalogEntry, error)
+	// AddAlias records a learned synonym so the next fetch matches without the LLM.
+	AddAlias(ctx context.Context, catalogID uuid.UUID, aliasText, origin string) error
 }

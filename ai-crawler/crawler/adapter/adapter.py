@@ -128,6 +128,10 @@ class SiteAdapter:
     blocked_patterns: list[str] = field(default_factory=list)
     extractor_stats: dict = field(default_factory=dict)
     run_info: dict = field(default_factory=dict)
+    # Rich detail learned by the LLM tool-calling agent (AGENT_LOOP=1):
+    interaction_steps: list = field(default_factory=list)   # clicks/navs to reveal prices
+    network_endpoints: list = field(default_factory=list)   # JSON/XHR price APIs
+    agent_trace: dict = field(default_factory=dict)         # agent run summary/status
     has_schema: bool = False
     updated_at: str = ""
 
