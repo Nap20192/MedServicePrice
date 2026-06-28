@@ -39,7 +39,6 @@ export default function HomePage() {
   }, []);
 
   const hosts = useMemo(() => [...new Set(sources.map((s) => srcHost(s.url)))], [sources]);
-  const cities = useMemo(() => new Set(sources.map((s) => s.city).filter(Boolean)).size, [sources]);
   const fmt = (n: number) => new Intl.NumberFormat('ru-RU').format(n);
 
   return (
@@ -66,12 +65,10 @@ export default function HomePage() {
 
         {/* Stats strip — реальные данные */}
         <div className="border-t border-neutral-200">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 grid grid-cols-2 sm:grid-cols-4 divide-x divide-neutral-200 border-x border-neutral-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 grid grid-cols-2 divide-x divide-neutral-200 border-x border-neutral-200">
             {[
               { v: loaded ? fmt(stats.totalPrices) : '—', l: 'цен в базе' },
-              { v: loaded ? fmt(stats.totalClinics) : '—', l: 'клиник' },
               { v: loaded ? String(hosts.length) : '—', l: 'источников' },
-              { v: loaded ? String(cities || '—') : '—', l: 'городов' },
             ].map((s) => (
               <div key={s.l} className="px-4 py-5">
                 <p className="font-mono text-2xl font-semibold text-neutral-900">{s.v}</p>
