@@ -51,6 +51,7 @@ const (
 	MatchCatalog = "catalog"
 	MatchFuzzy   = "fuzzy"
 	MatchLLM     = "llm"
+	MatchNew     = "new" // no existing entry — created a new canonical catalog row
 	MatchNone    = "none"
 )
 
@@ -95,4 +96,8 @@ type Repository interface {
 	ListCatalog(ctx context.Context) ([]CatalogEntry, error)
 	// AddAlias records a learned synonym so the next fetch matches without the LLM.
 	AddAlias(ctx context.Context, catalogID uuid.UUID, aliasText, origin string) error
+	// EnsureCatalogEntry returns the catalog id for a service name, creating a new
+	// canonical entry when none exists. Lets the catalog grow to cover real data
+	// instead of squashing thousands of services into a tiny seed catalog.
+	EnsureCatalogEntry(ctx context.Context, nameNorm, category string) (uuid.UUID, error)
 }

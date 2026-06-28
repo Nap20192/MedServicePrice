@@ -6,6 +6,7 @@ package usecase
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,10 +16,23 @@ import (
 	"medprice/pkg/rabbitmq"
 )
 
+// Real service names are short; longer strings are crawler mis-extractions
+// (descriptions) and must not become catalog entries (catalog name_norm is varchar(255)).
+const maxCatalogNameLen = 200
+
 type Service struct {
 	repo ndomain.Repository
 	llm  ndomain.LLMMatcher // optional; nil = LLM fallback disabled
 	log  rabbitmq.Logger
+}
+
+// truncRunes caps a string to n runes (safe for varchar limits + Cyrillic).
+func truncRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) > n {
+		return string(r[:n])
+	}
+	return s
 }
 
 type TaskMeta struct {
@@ -113,71 +127,46 @@ func (s *Service) ProcessSource(ctx context.Context, sourceID uuid.UUID, meta Ta
 		"city", valueOr(source.City, "unknown"),
 		"active_rows", len(rows))
 
-	// Catalog snapshot for the LLM prompt — loaded once, only if LLM is enabled.
-	var catalog []ndomain.CatalogEntry
-	if s.llm != nil {
-		if catalog, err = s.repo.ListCatalog(ctx); err != nil {
-			return errors.Wrap(err, "list catalog")
-		}
-		s.log.Info("normalize loaded catalog for llm",
-			"entries", len(catalog),
-			"source_url", source.URL)
-	}
-
 	// Dedup raw rows that collapse to the same catalog service: keep the cheapest.
 	offers := make(map[uuid.UUID]ndomain.Offer)
-	matched, unmatched := 0, 0
+	matched, created := 0, 0
 	methodCounts := map[string]int{
 		ndomain.MatchAlias:   0,
 		ndomain.MatchCatalog: 0,
 		ndomain.MatchFuzzy:   0,
-		ndomain.MatchLLM:     0,
+		ndomain.MatchNew:     0,
 		ndomain.MatchNone:    0,
 	}
 	categoryCounts := map[string]int{}
-	llmErrors := 0
-	aliasesLearned := 0
 	for i, row := range rows {
 		catalogID, method, err := s.repo.Match(ctx, row.Name)
 		if err != nil {
 			return errors.Wrapf(err, "match %q", row.Name)
 		}
 
-		// Deterministic miss → LLM fallback (best-effort). A hit is learned as an
-		// alias so the next fetch matches without the LLM.
-		if catalogID == uuid.Nil && s.llm != nil {
-			if id, conf, lerr := s.llm.Suggest(ctx, row.Name, catalog); lerr != nil {
-				llmErrors++
-				if llmErrors <= 3 {
-					s.log.Error("normalize llm suggest failed", "raw", row.Name, "err", lerr)
-				}
-			} else if id != uuid.Nil {
-				if aerr := s.repo.AddAlias(ctx, id, row.Name, "llm"); aerr != nil {
-					return errors.Wrap(aerr, "add llm alias")
-				}
-				catalogID, method = id, ndomain.MatchLLM
-				aliasesLearned++
-				if aliasesLearned <= 5 {
-					s.log.Info("normalize llm matched",
-						"raw", row.Name,
-						"confidence", conf)
-				}
-			}
-		}
-
+		// Deterministic miss → grow the catalog: create a new canonical entry from
+		// this service. Previously this fell to an LLM that was forced to pick from a
+		// tiny 10-row catalog and squashed thousands of distinct services into a
+		// handful of entries (e.g. 720 different services → "Биохимический анализ
+		// крови"), so service_offers ended up nearly empty.
 		if catalogID == uuid.Nil {
-			unmatched++
-			methodCounts[ndomain.MatchNone]++
-			if err := s.repo.RecordUnmatched(ctx, sourceID, row.Name); err != nil {
-				return errors.Wrap(err, "record unmatched")
+			name := strings.TrimSpace(row.Name)
+			// Real service names are short. An empty or paragraph-length "name" is a
+			// crawler mis-extraction (description text) — don't pollute the catalog;
+			// send it to the review queue instead.
+			if name == "" || len([]rune(name)) > maxCatalogNameLen {
+				methodCounts[ndomain.MatchNone]++
+				if err := s.repo.RecordUnmatched(ctx, sourceID, truncRunes(row.Name, 480)); err != nil {
+					return errors.Wrap(err, "record unmatched")
+				}
+				continue
 			}
-			if unmatched <= 5 {
-				s.log.Info("normalize unmatched sample",
-					"source_url", source.URL,
-					"raw", row.Name)
+			id, cerr := s.repo.EnsureCatalogEntry(ctx, name, categoryEnum(row))
+			if cerr != nil {
+				return errors.Wrapf(cerr, "ensure catalog entry %q", name)
 			}
-			progressLog(s.log, source.URL, i+1, len(rows), matched, unmatched, offers, started)
-			continue
+			catalogID, method = id, ndomain.MatchNew
+			created++
 		}
 		matched++
 		methodCounts[method]++
@@ -197,7 +186,7 @@ func (s *Service) ProcessSource(ctx context.Context, sourceID uuid.UUID, meta Ta
 				ParsedAt:     row.ParsedAt,
 			}
 		}
-		progressLog(s.log, source.URL, i+1, len(rows), matched, unmatched, offers, started)
+		progressLog(s.log, source.URL, i+1, len(rows), matched, created, offers, started)
 	}
 
 	list := make([]ndomain.Offer, 0, len(offers))
@@ -221,11 +210,9 @@ func (s *Service) ProcessSource(ctx context.Context, sourceID uuid.UUID, meta Ta
 		"raw_rows", len(rows),
 		"worker_rows_written", meta.RowsWritten,
 		"matched", matched,
-		"unmatched", unmatched,
+		"created_catalog_entries", created,
 		"gold_offers", len(list),
 		"deduped_matches", matched-len(list),
-		"aliases_learned", aliasesLearned,
-		"llm_errors", llmErrors,
 		"methods", methodCounts,
 		"raw_categories", categoryCounts,
 		"duration_s", time.Since(started).Seconds())
@@ -247,6 +234,40 @@ func progressLog(log rabbitmq.Logger, sourceLabel string, done, total, matched, 
 		"unmatched", unmatched,
 		"gold_offers_so_far", len(offers),
 		"duration_s", time.Since(started).Seconds())
+}
+
+// categoryEnum maps a raw row to a valid service_category enum value. The crawler's
+// category hint is freeform/English, so we keyword-classify name + hint, defaulting
+// to 'лаборатория' (labs dominate the data).
+func categoryEnum(row ndomain.RawRow) string {
+	hint := ""
+	if row.Category != nil {
+		hint = *row.Category
+	}
+	s := strings.ToLower(hint + " " + row.Name)
+	switch {
+	case containsAny(s, "узи", "мрт", "кт ", "рентген", "ренгрен", "экг", "ээг", "эхо",
+		"диагност", "эндоскоп", "гастроскоп", "колоноскоп", "флюорограф", "маммограф",
+		"томограф", "densitomet", "radiology", "ultrasound", "x-ray", "mri"):
+		return "диагностика"
+	case containsAny(s, "прием", "приём", "консультац", "осмотр", "врач", "doctor",
+		"specialist", "consult"):
+		return "прием врача"
+	case containsAny(s, "процедур", "инъекц", "укол", "массаж", "капельниц", "перевязк",
+		"манипул", "удален", "биопси", "пункци", "вакцин", "прививк", "procedure"):
+		return "процедура"
+	default:
+		return "лаборатория"
+	}
+}
+
+func containsAny(s string, subs ...string) bool {
+	for _, sub := range subs {
+		if strings.Contains(s, sub) {
+			return true
+		}
+	}
+	return false
 }
 
 func valueOr(value *string, fallback string) string {

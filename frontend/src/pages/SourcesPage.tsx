@@ -40,6 +40,7 @@ export default function SourcesPage() {
   const [sources, setSources] = useState<SourceDetails[]>([]);
   const [clinics, setClinics] = useState<ClinicRecord[]>([]);
   const [urls, setUrls] = useState('');
+  const [inlineClinic, setInlineClinic] = useState('');
   const [fetchNow, setFetchNow] = useState(true);
   const [intervalHours, setIntervalHours] = useState(24);
   const [clinicForm, setClinicForm] = useState(emptyClinic);
@@ -85,10 +86,22 @@ export default function SourcesPage() {
       const results = await Promise.allSettled(
         list.map((url) => createSource({ url, fetch_now: fetchNow })),
       );
-      const ok = results.filter((r) => r.status === 'fulfilled').length;
-      const failed = results.length - ok;
-      setMessage(`Добавлено ${ok} URL${failed ? `, ошибок: ${failed}` : ''}`);
+      const created = results
+        .filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof createSource>>> => r.status === 'fulfilled')
+        .map((r) => r.value.source.id);
+      const failed = results.length - created.length;
+
+      // Optional inline clinic: create it once and attach every new source to it.
+      let clinicNote = '';
+      const clinicName = inlineClinic.trim();
+      if (clinicName && created.length > 0) {
+        const clinic = await createClinic({ ...emptyClinic, name: clinicName, source_ids: created });
+        clinicNote = `, клиника «${clinic.name}» привязана`;
+      }
+
+      setMessage(`Добавлено ${created.length} URL${failed ? `, ошибок: ${failed}` : ''}${clinicNote}`);
       setUrls('');
+      setInlineClinic('');
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось добавить URL');
@@ -223,6 +236,15 @@ export default function SourcesPage() {
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-teal-400"
               placeholder={'https://invitro.kz\nhttps://kdlolymp.kz\nhttps://example.kz/prices'}
             />
+            <div>
+              <input
+                value={inlineClinic}
+                onChange={(e) => setInlineClinic(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+                placeholder="Название клиники (необязательно)"
+              />
+              <p className="text-xs text-slate-400 mt-1">Если указать — создастся клиника и привяжется ко всем добавленным URL.</p>
+            </div>
             <div className="flex items-center justify-between gap-3">
               <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
                 <input

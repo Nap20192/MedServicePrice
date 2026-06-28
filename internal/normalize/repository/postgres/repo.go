@@ -97,9 +97,11 @@ func (r *repository) Match(ctx context.Context, rawName string) (uuid.UUID, stri
 		return uuid.Nil, ndomain.MatchNone, err
 	}
 
+	// 0.62 (was 0.45): Russian med names share tokens ("анализ крови"), so a loose
+	// threshold over-merged distinct services into one catalog entry.
 	const fuzzy = `
 		SELECT id FROM services_catalog
-		WHERE similarity(name_norm, $1) > 0.45
+		WHERE similarity(name_norm, $1) > 0.62
 		ORDER BY similarity(name_norm, $1) DESC
 		LIMIT 1`
 	err = r.db.GetContext(ctx, &id, fuzzy, rawName)
@@ -129,6 +131,19 @@ func (r *repository) AddAlias(ctx context.Context, catalogID uuid.UUID, aliasTex
 		 VALUES ($1, $2, $3) ON CONFLICT (alias_key) DO NOTHING`,
 		catalogID, aliasText, origin)
 	return err
+}
+
+// EnsureCatalogEntry inserts a new canonical service, or returns the existing id
+// if one with the same name_key already exists. name_key is a generated unique
+// column, so ON CONFLICT resolves concurrent/duplicate creation safely.
+func (r *repository) EnsureCatalogEntry(ctx context.Context, nameNorm, category string) (uuid.UUID, error) {
+	var id uuid.UUID
+	err := r.db.GetContext(ctx, &id, `
+		INSERT INTO services_catalog (name_norm, category)
+		VALUES ($1, $2::service_category)
+		ON CONFLICT (name_key) DO UPDATE SET name_norm = services_catalog.name_norm
+		RETURNING id`, nameNorm, category)
+	return id, err
 }
 
 func (r *repository) BindParsed(ctx context.Context, rowID, catalogID uuid.UUID) error {
