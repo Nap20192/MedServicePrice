@@ -11,15 +11,15 @@ type Clinic struct {
 	Name          string     `json:"name" db:"name"`
 	SourceID      *uuid.UUID `json:"source_id,omitempty" db:"source_id"`
 	City          *string    `json:"city,omitempty" db:"city"`
-	Address       *string   `json:"address,omitempty" db:"address"`
-	Phone         *string   `json:"phone,omitempty" db:"phone"`
-	WorkingHours  *string   `json:"working_hours,omitempty" db:"working_hours"`
-	URL           *string   `json:"url,omitempty" db:"url"`
-	GooglePlaceID *string   `json:"google_place_id,omitempty" db:"google_place_id"`
-	Lat           *float64  `json:"lat,omitempty" db:"lat"`
-	Lng           *float64  `json:"lng,omitempty" db:"lng"`
-	Rating        *float64  `json:"rating,omitempty" db:"rating"`
-	ReviewsCount  *int      `json:"reviews_count,omitempty" db:"reviews_count"`
+	Address       *string    `json:"address,omitempty" db:"address"`
+	Phone         *string    `json:"phone,omitempty" db:"phone"`
+	WorkingHours  *string    `json:"working_hours,omitempty" db:"working_hours"`
+	URL           *string    `json:"url,omitempty" db:"url"`
+	GooglePlaceID *string    `json:"google_place_id,omitempty" db:"google_place_id"`
+	Lat           *float64   `json:"lat,omitempty" db:"lat"`
+	Lng           *float64   `json:"lng,omitempty" db:"lng"`
+	Rating        *float64   `json:"rating,omitempty" db:"rating"`
+	ReviewsCount  *int       `json:"reviews_count,omitempty" db:"reviews_count"`
 }
 
 type Source struct {
@@ -100,23 +100,33 @@ type AggregatedPrice struct {
 	ClinicURL       *string   `db:"clinic_url" json:"clinic_url,omitempty"`
 	City            *string   `db:"city" json:"city,omitempty"`
 	Address         *string   `db:"address" json:"address,omitempty"`
+	Phone           *string   `db:"phone" json:"phone,omitempty"`
+	WorkingHours    *string   `db:"working_hours" json:"working_hours,omitempty"`
+	Lat             *float64  `db:"lat" json:"lat,omitempty"`
+	Lng             *float64  `db:"lng" json:"lng,omitempty"`
+	Rating          *float64  `db:"rating" json:"rating,omitempty"`
+	ReviewsCount    *int      `db:"reviews_count" json:"reviews_count,omitempty"`
 	ServiceNameNorm string    `db:"service_name_norm" json:"service_name_norm"`
 	Category        string    `db:"category" json:"category"`
 	PriceKZT        float64   `db:"price_kzt" json:"price_kzt"`
+	Currency        string    `db:"currency" json:"currency"`
+	DurationDays    *int      `db:"duration_days" json:"duration_days,omitempty"`
 	ParsedAt        time.Time `db:"parsed_at" json:"parsed_at"`
 }
 
 // PriceSearch holds every search filter so pagination is computed server-side over
 // the full filtered set (not just one page).
 type PriceSearch struct {
-	Query    string
-	City     string
-	Category string
-	Sort     string
-	MinPrice float64
-	MaxPrice float64 // 0 = no upper bound
-	Limit    int
-	Offset   int
+	Query     string
+	ClinicID  string
+	City      string
+	Category  string
+	Sort      string
+	MinPrice  float64
+	MaxPrice  float64 // 0 = no upper bound
+	RatingMin float64
+	Limit     int
+	Offset    int
 }
 
 // SearchResult is a paginated, de-duplicated price search response.

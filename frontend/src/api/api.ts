@@ -34,9 +34,17 @@ interface AggregatedPrice {
   clinic_url?: string | null;
   city?: string | null;
   address?: string | null;
+  phone?: string | null;
+  working_hours?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  rating?: number | null;
+  reviews_count?: number | null;
   service_name_norm: string;
   category: string;
   price_kzt: number;
+  currency?: 'KZT' | 'USD';
+  duration_days?: number | null;
   parsed_at: string;
 }
 
@@ -56,17 +64,19 @@ function toMedService(p: AggregatedPrice): MedService {
     clinic_name: p.clinic_name,
     city: p.city ?? '',
     address: p.address ?? '',
-    phone: '',
-    working_hours: '',
+    phone: p.phone ?? '',
+    working_hours: p.working_hours ?? '',
     source_url: p.clinic_url ?? '',
-    lat: 0,
-    lng: 0,
+    lat: p.lat ?? 0,
+    lng: p.lng ?? 0,
+    rating: p.rating ?? null,
+    reviews_count: p.reviews_count ?? null,
     service_id: p.price_id,
     service_name_norm: p.service_name_norm,
     category: toCategory(p.category),
     price_kzt: p.price_kzt,
-    currency: 'KZT',
-    duration_days: null,
+    currency: p.currency ?? 'KZT',
+    duration_days: p.duration_days ?? null,
     parsed_at: p.parsed_at,
     is_active: true,
     online_booking: false,
@@ -100,6 +110,7 @@ function buildSearchParams(
   if (filters.category) p.set('category', filters.category);
   if (filters.priceMin && filters.priceMin > 0) p.set('min_price', String(filters.priceMin));
   if (filters.priceMax && filters.priceMax < PRICE_MAX) p.set('max_price', String(filters.priceMax));
+  if (filters.ratingMin && filters.ratingMin > 0) p.set('rating_min', String(filters.ratingMin));
   if (sort) p.set('sort', sort);
   p.set('limit', String(pageSize));
   p.set('offset', String((Math.max(1, page) - 1) * pageSize));
@@ -130,8 +141,7 @@ async function fetchItems(params: URLSearchParams): Promise<MedService[]> {
 }
 
 export async function getClinicById(clinicId: string): Promise<MedService[]> {
-  const all = await fetchItems(new URLSearchParams({ limit: '100' }));
-  return all.filter((s) => s.clinic_id === clinicId);
+  return fetchItems(new URLSearchParams({ clinic_id: clinicId, limit: '100' }));
 }
 
 export async function getAutocomplete(query: string): Promise<string[]> {

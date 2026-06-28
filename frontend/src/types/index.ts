@@ -14,6 +14,8 @@ export interface MedService {
   source_url: string;
   lat: number;
   lng: number;
+  rating: number | null;
+  reviews_count: number | null;
   service_id: string;
   service_name_norm: string;
   category: ServiceCategory;
@@ -114,6 +116,7 @@ export interface SearchFilters {
   category: ServiceCategory | '';
   priceMin: number;
   priceMax: number;
+  ratingMin: number;
   durationDays: number | null;
   workingNow: boolean;
   onlineBooking: boolean;

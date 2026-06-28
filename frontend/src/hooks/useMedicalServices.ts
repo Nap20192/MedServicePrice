@@ -7,6 +7,7 @@ const DEFAULT_FILTERS: SearchFilters = {
   category: '',
   priceMin: 0,
   priceMax: 200000,
+  ratingMin: 0,
   durationDays: null,
   workingNow: false,
   onlineBooking: false,

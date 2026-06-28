@@ -1,9 +1,8 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import { MedService } from '../types';
 import { formatPrice } from '../utils/format';
-import { Link } from 'react-router-dom';
 
 // Fix default marker icons for bundlers
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
@@ -17,16 +16,15 @@ function createPriceIcon(price: number) {
   const label = formatPrice(price);
   return L.divIcon({
     html: `<div style="
-      background: linear-gradient(135deg, #0e8595, #14b8a6);
-      color: white;
-      padding: 4px 8px;
-      border-radius: 20px;
+      background: #111827;
+      color: #fff;
+      padding: 5px 8px;
       font-size: 12px;
       font-weight: 700;
-      font-family: Inter, sans-serif;
+      font-family: JetBrains Mono, ui-monospace, monospace;
       white-space: nowrap;
-      box-shadow: 0 2px 8px rgba(14,133,149,0.4);
-      border: 2px solid white;
+      box-shadow: none;
+      border: 1px solid #fff;
     ">${label}</div>`,
     className: '',
     iconAnchor: [0, 0],
@@ -57,7 +55,7 @@ export default function MapView({ services }: MapViewProps) {
     : [48.0196, 66.9237]; // Centre of Kazakhstan
 
   return (
-    <div className="w-full h-full rounded-xl overflow-hidden border border-slate-200">
+    <div className="w-full h-full overflow-hidden border border-neutral-200">
       <MapContainer
         center={center}
         zoom={clinics.length === 1 ? 14 : 5}
@@ -77,12 +75,12 @@ export default function MapView({ services }: MapViewProps) {
             <Popup>
               <div style={{ fontFamily: 'Inter, sans-serif', minWidth: 180 }}>
                 <p style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>{service.clinic_name}</p>
-                <p style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>{service.address}</p>
-                <p style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>{service.working_hours}</p>
-                <p style={{ fontSize: 13, fontWeight: 600, color: '#0e8595' }}>от {formatPrice(minPrice)}</p>
+                <p style={{ fontSize: 12, color: '#525252', marginBottom: 4 }}>{service.address}</p>
+                <p style={{ fontSize: 12, color: '#525252', marginBottom: 8 }}>{service.working_hours}</p>
+                <p style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>от {formatPrice(minPrice)}</p>
                 <a
                   href={`/clinic/${service.clinic_id}`}
-                  style={{ fontSize: 12, color: '#14b8a6', textDecoration: 'none', display: 'block', marginTop: 8 }}
+                  style={{ fontSize: 12, color: '#111827', textDecoration: 'underline', display: 'block', marginTop: 8 }}
                 >
                   Все услуги клиники →
                 </a>

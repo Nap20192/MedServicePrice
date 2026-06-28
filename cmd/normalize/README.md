@@ -35,16 +35,30 @@ four layers under `internal/api/`.
 
 To request more data it **reuses** `adapter.fetch` / `adapter.create` (no new routing keys).
 
-## Run
+## Run with AI
 
 ```bash
 RABBITMQ_URL=amqp://msp:msp@localhost:5672/ \
 DATABASE_URL=postgres://msp:msp@localhost:55432/msp?sslmode=disable \
+LLM_BASE_URL=https://api.deepseek.com \
+LLM_API_KEY=... \
+LLM_MODEL=deepseek-chat \
+LLM_MIN_CONFIDENCE=0.7 \
+LLM_TIMEOUT_S=20 \
 go run ./cmd/normalize
 ```
 
-## Status: STUB (per spec)
+For Docker Compose, put the same values into `deploy/.env` and run:
 
-- **Matcher** = exact, case-insensitive lookup on `name_norm`. TODO: trigram/fuzzy
-  similarity + synonyms + optional Ollama fallback.
-- **Unmatched queue** not persisted yet (only counted/logged).
+```bash
+docker compose -f deploy/docker-compose.yml up normalize
+```
+
+## Matching strategy
+
+- deterministic match: alias, exact catalog key, trigram/fuzzy candidates;
+- AI fallback: OpenAI-compatible `/chat/completions` endpoint decides whether to bind
+  to an existing catalog entry or create a new canonical service;
+- unmatched/noisy rows are persisted in `unmatched_services`;
+- normalized, deduplicated offers are published to `service_offers`, which is the only
+  table read by the public API.

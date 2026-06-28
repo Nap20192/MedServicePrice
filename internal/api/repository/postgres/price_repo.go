@@ -38,6 +38,11 @@ func (r *priceRepo) SearchPrices(ctx context.Context, p domain.PriceSearch) ([]d
 		args = append(args, "%"+p.Query+"%")
 		argIdx++
 	}
+	if p.ClinicID != "" {
+		where += fmt.Sprintf(` AND COALESCE(c.id, s.id)::text = $%d`, argIdx)
+		args = append(args, p.ClinicID)
+		argIdx++
+	}
 	if p.City != "" {
 		where += fmt.Sprintf(` AND o.city::text ILIKE $%d`, argIdx)
 		args = append(args, "%"+p.City+"%")
@@ -58,6 +63,11 @@ func (r *priceRepo) SearchPrices(ctx context.Context, p domain.PriceSearch) ([]d
 		args = append(args, p.MaxPrice)
 		argIdx++
 	}
+	if p.RatingMin > 0 {
+		where += fmt.Sprintf(` AND c.rating >= $%d`, argIdx)
+		args = append(args, p.RatingMin)
+		argIdx++
+	}
 
 	// Network model: branch clinics share a source (clinics.source_id, M:1). An offer
 	// (source + city) belongs to the source's branches in that city. LEFT JOIN so a
@@ -69,8 +79,20 @@ func (r *priceRepo) SearchPrices(ctx context.Context, p domain.PriceSearch) ([]d
 			COALESCE(c.id, s.id) AS clinic_id,
 			COALESCE(c.name, s.url) AS clinic_name,
 			COALESCE(c.url, s.url) AS clinic_url,
-			o.city, c.address, sc.name_norm AS service_name_norm, sc.category,
-			o.price_kzt, o.parsed_at
+			o.city,
+			c.address,
+			c.phone,
+			c.working_hours,
+			c.lat,
+			c.lng,
+			c.rating,
+			c.reviews_count,
+			sc.name_norm AS service_name_norm,
+			sc.category,
+			o.price_kzt,
+			o.currency,
+			o.duration_days,
+			o.parsed_at
 		FROM service_offers o
 		JOIN sources s ON o.source_id = s.id
 		LEFT JOIN clinics c ON c.source_id = s.id

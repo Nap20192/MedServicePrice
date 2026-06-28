@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import SearchBar from '../components/SearchBar';
 import ServiceCard from '../components/ServiceCard';
 import { SkeletonList } from '../components/SkeletonCard';
+import MapView from '../components/MapView';
 import { useMedicalServices } from '../hooks/useMedicalServices';
 import { SearchFilters, SortMode, ServiceCategory } from '../types';
 import { categoryDot } from '../utils/format';
@@ -32,9 +33,10 @@ export default function SearchPage() {
 
   const [query, setQuery] = useState(urlQuery);
   const [sort, setSort] = useState<SortMode>('price_asc');
+  const [view, setView] = useState<'list' | 'map'>('list');
   const [filters, setFilters] = useState<SearchFilters>({
     city: urlCity, category: urlCategory, priceMin: 0, priceMax: PRICE_MAX,
-    durationDays: null, workingNow: false, onlineBooking: false,
+    ratingMin: 0, durationDays: null, workingNow: false, onlineBooking: false,
   });
 
   useEffect(() => {
@@ -52,6 +54,8 @@ export default function SearchPage() {
   const safePage = Math.min(page, pageCount);
   const rangeStart = total === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
   const rangeEnd = Math.min(rangeStart + data.length - 1, total);
+  const mappedCount = data.filter((s) => s.lat && s.lng).length;
+  const citiesOnPage = new Set(data.map((s) => s.city).filter(Boolean)).size;
 
   useEffect(() => { setPage(1); }, [query, JSON.stringify(filters), sort]);
 
@@ -116,8 +120,20 @@ export default function SearchPage() {
                   className="w-1/2 border border-neutral-300 px-2 py-1.5 text-sm font-mono focus:outline-none focus:border-neutral-900"
                 />
               </div>
+              <span className="label block mt-5">Рейтинг клиники</span>
+              <div className="mt-2 grid grid-cols-4 border border-neutral-300 divide-x divide-neutral-300">
+                {[0, 3.5, 4, 4.5].map((rating) => (
+                  <button
+                    key={rating}
+                    onClick={() => updateFilter('ratingMin', rating)}
+                    className={`py-1.5 text-xs font-mono transition-colors ${filters.ratingMin === rating ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-neutral-100'}`}
+                  >
+                    {rating === 0 ? 'Все' : `${rating}+`}
+                  </button>
+                ))}
+              </div>
               <button
-                onClick={() => setFilters({ city: filters.city, category: '', priceMin: 0, priceMax: PRICE_MAX, durationDays: null, workingNow: false, onlineBooking: false })}
+                onClick={() => setFilters({ city: filters.city, category: '', priceMin: 0, priceMax: PRICE_MAX, ratingMin: 0, durationDays: null, workingNow: false, onlineBooking: false })}
                 className="mt-4 w-full text-xs text-neutral-400 hover:text-neutral-900 transition-colors text-left"
               >
                 Сбросить фильтры
@@ -128,26 +144,46 @@ export default function SearchPage() {
           {/* Results */}
           <div className="min-w-0">
             <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
-              <p className="text-sm text-neutral-500">
-                {loading ? 'Поиск…' : (
-                  <>
-                    <span className="font-mono font-semibold text-neutral-900">{total}</span> предложений
-                    {query && <> · «<span className="text-neutral-900">{query}</span>»</>}
-                    {total > PAGE_SIZE && <span className="text-neutral-400 font-mono"> · {rangeStart}–{rangeEnd}</span>}
-                  </>
+              <div>
+                <p className="text-sm text-neutral-500">
+                  {loading ? 'Поиск…' : (
+                    <>
+                      <span className="font-mono font-semibold text-neutral-900">{total}</span> предложений
+                      {query && <> · «<span className="text-neutral-900">{query}</span>»</>}
+                      {total > PAGE_SIZE && <span className="text-neutral-400 font-mono"> · {rangeStart}–{rangeEnd}</span>}
+                    </>
+                  )}
+                </p>
+                {!loading && total > 0 && (
+                  <p className="label mt-1">
+                    {citiesOnPage} городов на странице · {mappedCount} с координатами · данные старше 30 дней помечаются
+                  </p>
                 )}
-              </p>
+              </div>
 
-              <div className="flex border border-neutral-300 divide-x divide-neutral-300">
-                {SORTS.map((s) => (
-                  <button
-                    key={s.value}
-                    onClick={() => setSort(s.value)}
-                    className={`px-3 py-1.5 text-xs transition-colors ${sort === s.value ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-neutral-100'}`}
-                  >
-                    {s.label}
-                  </button>
-                ))}
+              <div className="flex gap-px bg-neutral-300 border border-neutral-300">
+                <div className="flex divide-x divide-neutral-300 bg-white">
+                  {SORTS.map((s) => (
+                    <button
+                      key={s.value}
+                      onClick={() => setSort(s.value)}
+                      className={`px-3 py-1.5 text-xs transition-colors ${sort === s.value ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-neutral-100'}`}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex divide-x divide-neutral-300 bg-white">
+                  {(['list', 'map'] as const).map((v) => (
+                    <button
+                      key={v}
+                      onClick={() => setView(v)}
+                      className={`px-3 py-1.5 text-xs transition-colors ${view === v ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-neutral-100'}`}
+                    >
+                      {v === 'list' ? 'Список' : 'Карта'}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -158,6 +194,17 @@ export default function SearchPage() {
                 <p className="font-mono text-sm text-neutral-900">Ничего не найдено</p>
                 <p className="text-sm text-neutral-400 mt-1">Измените запрос или сбросьте фильтры</p>
               </div>
+            ) : view === 'map' ? (
+              mappedCount === 0 ? (
+                <div className="border border-neutral-200 bg-white py-20 text-center">
+                  <p className="font-mono text-sm text-neutral-900">Нет координат для карты</p>
+                  <p className="text-sm text-neutral-400 mt-1">Импортируйте клиники из Google Maps или добавьте lat/lng в БД</p>
+                </div>
+              ) : (
+                <div className="border border-neutral-200 bg-white h-[620px]">
+                  <MapView services={data.filter((s) => s.lat && s.lng)} />
+                </div>
+              )
             ) : (
               <>
                 <div className="space-y-px bg-neutral-200 border border-neutral-200">

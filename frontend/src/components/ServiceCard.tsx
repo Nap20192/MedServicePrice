@@ -35,9 +35,14 @@ export default function ServiceCard({ service, showCity = false }: ServiceCardPr
               <span className={`w-1.5 h-1.5 rounded-full ${categoryDot[service.category] || 'bg-neutral-400'}`} />
               {service.category}
             </span>
+            <span className="label">{service.currency}</span>
             {service.duration_days !== null && (
               <span className="label">срок {service.duration_days} дн.</span>
             )}
+            {service.rating !== null && (
+              <span className="label">рейтинг {service.rating.toFixed(1)}{service.reviews_count ? ` / ${service.reviews_count}` : ''}</span>
+            )}
+            {service.online_booking && <span className="label">онлайн-запись</span>}
           </div>
 
           {/* Clinic */}
@@ -59,8 +64,14 @@ export default function ServiceCard({ service, showCity = false }: ServiceCardPr
             )}
             {showCity && service.city && <span className="label">{service.city}</span>}
           </div>
-          {service.address && (
-            <p className="text-xs text-neutral-500 mt-1 truncate">{service.address}</p>
+          {(service.address || service.phone || service.working_hours) && (
+            <div className="mt-2 grid gap-1 text-xs text-neutral-500">
+              {service.address && <p className="truncate">{service.address}</p>}
+              <p className="flex flex-wrap gap-x-3 gap-y-1">
+                {service.phone && <span>{service.phone}</span>}
+                {service.working_hours && <span>{service.working_hours}</span>}
+              </p>
+            </div>
           )}
         </div>
 
@@ -69,7 +80,7 @@ export default function ServiceCard({ service, showCity = false }: ServiceCardPr
           <div className="text-right">
             <p className="font-mono text-xl font-semibold text-neutral-900 leading-none">{formatPrice(service.price_kzt)}</p>
             <p className={`text-[11px] mt-1.5 font-mono ${stale ? 'text-amber-600' : 'text-neutral-400'}`}>
-              {stale && '⚠ '}{formatParsedAt(service.parsed_at)}
+              {stale ? 'устарело · ' : ''}{formatParsedAt(service.parsed_at)}
             </p>
           </div>
 
@@ -90,7 +101,7 @@ export default function ServiceCard({ service, showCity = false }: ServiceCardPr
               className={`text-xs py-1.5 border transition-colors ${inComp ? 'border-neutral-900 bg-neutral-100 text-neutral-900' : 'border-neutral-300 text-neutral-600 hover:border-neutral-900'}`}
               id={`compare-btn-${service.service_id}`}
             >
-              {inComp ? '✓ В сравнении' : '+ Сравнить'}
+              {inComp ? 'В сравнении' : '+ Сравнить'}
             </button>
           </div>
         </div>
