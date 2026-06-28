@@ -48,6 +48,7 @@ LLM_TIMEOUT_S=20 \
 LLM_MAX_TOKENS=120 \
 LLM_MAX_CALLS_PER_SOURCE=80 \
 NORMALIZE_WORKERS=1 \
+NORMALIZE_SOURCE_WORKERS=2 \
 go run ./cmd/normalize
 ```
 
@@ -65,6 +66,9 @@ docker compose -f deploy/docker-compose.yml up normalize
 - token guard: the LLM answer is capped by `LLM_MAX_TOKENS`, each source is capped by
   `LLM_MAX_CALLS_PER_SOURCE`, and quota/rate-limit/token errors disable the LLM until
   process restart while deterministic matching keeps running;
+- worker pools: `NORMALIZE_WORKERS` controls RabbitMQ event consumers, while
+  `NORMALIZE_SOURCE_WORKERS` controls how many pending sources the sweep processes
+  in parallel;
 - unmatched/noisy rows are persisted in `unmatched_services`;
 - normalized, deduplicated offers are published to `service_offers`, which is the only
   table read by the public API.

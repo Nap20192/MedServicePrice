@@ -99,6 +99,7 @@ func main() {
 	repo := normpg.NewRepository(db)
 	svc := normuc.NewService(repo, buildLLM(appLogger), appLogger, normuc.Options{
 		MaxLLMCallsPerSource: intEnv("LLM_MAX_CALLS_PER_SOURCE", 80),
+		SourceWorkers:        intEnv("NORMALIZE_SOURCE_WORKERS", 2),
 	})
 	cons := normapp.NewConsumer(svc, appLogger)
 

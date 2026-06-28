@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"sort"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -77,36 +79,40 @@ func (r *repository) LoadActiveRows(ctx context.Context, sourceID uuid.UUID) ([]
 //
 // Keys are computed by msp_name_key() in SQL so both sides normalize identically.
 func (r *repository) Match(ctx context.Context, rawName string) (uuid.UUID, string, error) {
-	var id uuid.UUID
-
-	err := r.db.GetContext(ctx, &id,
-		`SELECT service_catalog_id FROM service_aliases WHERE alias_key = msp_name_key($1) LIMIT 1`, rawName)
-	if err == nil {
-		return id, ndomain.MatchAlias, nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return uuid.Nil, ndomain.MatchNone, err
+	var row struct {
+		ID     uuid.UUID `db:"id"`
+		Method string    `db:"method"`
 	}
 
-	err = r.db.GetContext(ctx, &id,
-		`SELECT id FROM services_catalog WHERE name_key = msp_name_key($1) LIMIT 1`, rawName)
-	if err == nil {
-		return id, ndomain.MatchCatalog, nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return uuid.Nil, ndomain.MatchNone, err
-	}
+	// One round-trip instead of alias -> catalog -> fuzzy as three separate queries.
+	// 0.62 fuzzy threshold: Russian med names share tokens ("анализ крови"), so a
+	// loose threshold over-merges distinct services into one catalog entry.
+	const q = `
+		WITH key AS (SELECT msp_name_key($1) AS value),
+		matches AS (
+			SELECT sa.service_catalog_id AS id, 'alias' AS method, 1 AS priority, 1::float AS score
+			FROM service_aliases sa, key
+			WHERE sa.alias_key = key.value
 
-	// 0.62 (was 0.45): Russian med names share tokens ("анализ крови"), so a loose
-	// threshold over-merged distinct services into one catalog entry.
-	const fuzzy = `
-		SELECT id FROM services_catalog
-		WHERE similarity(name_norm, $1) > 0.62
-		ORDER BY similarity(name_norm, $1) DESC
+			UNION ALL
+
+			SELECT sc.id, 'catalog' AS method, 2 AS priority, 1::float AS score
+			FROM services_catalog sc, key
+			WHERE sc.name_key = key.value
+
+			UNION ALL
+
+			SELECT sc.id, 'fuzzy' AS method, 3 AS priority, similarity(sc.name_norm, $1) AS score
+			FROM services_catalog sc
+			WHERE similarity(sc.name_norm, $1) > 0.62
+		)
+		SELECT id, method
+		FROM matches
+		ORDER BY priority, score DESC
 		LIMIT 1`
-	err = r.db.GetContext(ctx, &id, fuzzy, rawName)
+	err := r.db.GetContext(ctx, &row, q, rawName)
 	if err == nil {
-		return id, ndomain.MatchFuzzy, nil
+		return row.ID, row.Method, nil
 	}
 	if errors.Is(err, sql.ErrNoRows) {
 		return uuid.Nil, ndomain.MatchNone, nil
@@ -201,6 +207,10 @@ func (r *repository) PublishOffers(ctx context.Context, sourceID uuid.UUID, city
 	}
 	defer tx.Rollback()
 
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, sourceID.String()); err != nil {
+		return err
+	}
+
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE service_offers SET is_active = false WHERE source_id = $1`, sourceID); err != nil {
 		return err
@@ -218,6 +228,9 @@ func (r *repository) PublishOffers(ctx context.Context, sourceID uuid.UUID, city
 			parsed_at     = EXCLUDED.parsed_at,
 			updated_at    = CURRENT_TIMESTAMP,
 			is_active     = true`
+	sort.Slice(offers, func(i, j int) bool {
+		return offers[i].CatalogID.String() < offers[j].CatalogID.String()
+	})
 	for _, o := range offers {
 		if _, err := tx.ExecContext(ctx, upsert,
 			sourceID, o.CatalogID, city, o.PriceKZT, o.Currency, o.DurationDays, o.ParsedAt); err != nil {
@@ -225,4 +238,14 @@ func (r *repository) PublishOffers(ctx context.Context, sourceID uuid.UUID, city
 		}
 	}
 	return tx.Commit()
+}
+
+func (r *repository) IsRetryable(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "SQLSTATE 40P01") ||
+		strings.Contains(msg, "SQLSTATE 40001") ||
+		strings.Contains(strings.ToLower(msg), "deadlock detected")
 }

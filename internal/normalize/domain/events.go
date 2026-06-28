@@ -112,6 +112,8 @@ type Repository interface {
 	RecordUnmatched(ctx context.Context, sourceID uuid.UUID, rawName string) error
 	// PublishOffers atomically rebuilds the source's live gold offers, stamped with city.
 	PublishOffers(ctx context.Context, sourceID uuid.UUID, city *string, offers []Offer) error
+	// IsRetryable reports transient database errors such as deadlocks/serialization failures.
+	IsRetryable(err error) bool
 	// ListCatalog returns all catalog entries (for the LLM prompt).
 	ListCatalog(ctx context.Context) ([]CatalogEntry, error)
 	// AddAlias records a learned synonym so the next fetch matches without the LLM.
