@@ -5,8 +5,13 @@ import ServiceCard from '../components/ServiceCard';
 import { SkeletonList } from '../components/SkeletonCard';
 import MapView from '../components/MapView';
 import { useMedicalServices } from '../hooks/useMedicalServices';
-import { SearchFilters, SortMode, ServiceCategory } from '../types';
+import { listSources } from '../api/api';
+import { SearchFilters, SortMode, ServiceCategory, SourceDetails } from '../types';
 import { categoryDot } from '../utils/format';
+
+function srcHost(url: string) {
+  try { return new URL(url).host; } catch { return url; }
+}
 
 const PRICE_MAX = 200000;
 const PAGE_SIZE = 20;
@@ -35,9 +40,12 @@ export default function SearchPage() {
   const [sort, setSort] = useState<SortMode>('price_asc');
   const [view, setView] = useState<'list' | 'map'>('list');
   const [filters, setFilters] = useState<SearchFilters>({
-    city: urlCity, category: urlCategory, priceMin: 0, priceMax: PRICE_MAX,
+    city: urlCity, category: urlCategory, sourceId: '', priceMin: 0, priceMax: PRICE_MAX,
     ratingMin: 0, durationDays: null, workingNow: false, onlineBooking: false,
   });
+  const [sources, setSources] = useState<SourceDetails[]>([]);
+
+  useEffect(() => { listSources().then(setSources).catch(() => {}); }, []);
 
   useEffect(() => {
     setQuery(searchParams.get('query') || '');
@@ -106,6 +114,20 @@ export default function SearchPage() {
               </div>
             </div>
 
+            <div className="p-4 border-b border-neutral-200">
+              <span className="label">Источник</span>
+              <select
+                value={filters.sourceId}
+                onChange={(e) => updateFilter('sourceId', e.target.value)}
+                className="w-full mt-2 border border-neutral-300 bg-white px-2 py-1.5 text-sm focus:outline-none focus:border-neutral-900"
+              >
+                <option value="">Все источники</option>
+                {sources.map((s) => (
+                  <option key={s.id} value={s.id}>{srcHost(s.url)}</option>
+                ))}
+              </select>
+            </div>
+
             <div className="p-4">
               <span className="label">Цена, ₸</span>
               <div className="flex gap-2 mt-2">
@@ -133,7 +155,7 @@ export default function SearchPage() {
                 ))}
               </div>
               <button
-                onClick={() => setFilters({ city: filters.city, category: '', priceMin: 0, priceMax: PRICE_MAX, ratingMin: 0, durationDays: null, workingNow: false, onlineBooking: false })}
+                onClick={() => setFilters({ city: filters.city, category: '', sourceId: '', priceMin: 0, priceMax: PRICE_MAX, ratingMin: 0, durationDays: null, workingNow: false, onlineBooking: false })}
                 className="mt-4 w-full text-xs text-neutral-400 hover:text-neutral-900 transition-colors text-left"
               >
                 Сбросить фильтры

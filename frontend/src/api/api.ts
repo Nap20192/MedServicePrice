@@ -108,6 +108,7 @@ function buildSearchParams(
   if (query.trim()) p.set('q', query.trim());
   if (filters.city && filters.city !== 'Все города') p.set('city', filters.city);
   if (filters.category) p.set('category', filters.category);
+  if (filters.sourceId) p.set('source_id', filters.sourceId);
   if (filters.priceMin && filters.priceMin > 0) p.set('min_price', String(filters.priceMin));
   if (filters.priceMax && filters.priceMax < PRICE_MAX) p.set('max_price', String(filters.priceMax));
   if (filters.ratingMin && filters.ratingMin > 0) p.set('rating_min', String(filters.ratingMin));

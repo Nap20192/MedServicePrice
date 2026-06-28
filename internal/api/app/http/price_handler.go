@@ -23,6 +23,7 @@ func (h *priceHandler) SearchPrices(w http.ResponseWriter, r *http.Request) {
 	result, err := h.usecase.Search(r.Context(), domain.PriceSearch{
 		Query:     q.Get("q"),
 		ClinicID:  q.Get("clinic_id"),
+		SourceID:  q.Get("source_id"),
 		City:      q.Get("city"),
 		Category:  q.Get("category"),
 		Sort:      q.Get("sort"),

@@ -5,6 +5,7 @@ import { searchServices } from '../api/api';
 const DEFAULT_FILTERS: SearchFilters = {
   city: 'Все города',
   category: '',
+  sourceId: '',
   priceMin: 0,
   priceMax: 200000,
   ratingMin: 0,

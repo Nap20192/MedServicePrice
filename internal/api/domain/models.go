@@ -119,6 +119,7 @@ type AggregatedPrice struct {
 type PriceSearch struct {
 	Query     string
 	ClinicID  string
+	SourceID  string
 	City      string
 	Category  string
 	Sort      string

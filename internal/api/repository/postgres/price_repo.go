@@ -38,6 +38,11 @@ func (r *priceRepo) SearchPrices(ctx context.Context, p domain.PriceSearch) ([]d
 		args = append(args, "%"+p.Query+"%")
 		argIdx++
 	}
+	if p.SourceID != "" {
+		where += fmt.Sprintf(` AND o.source_id::text = $%d`, argIdx)
+		args = append(args, p.SourceID)
+		argIdx++
+	}
 	if p.ClinicID != "" {
 		where += fmt.Sprintf(` AND COALESCE(c.id, s.id)::text = $%d`, argIdx)
 		args = append(args, p.ClinicID)

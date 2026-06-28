@@ -114,6 +114,7 @@ export interface SourceCommandResult {
 export interface SearchFilters {
   city: string;
   category: ServiceCategory | '';
+  sourceId: string;
   priceMin: number;
   priceMax: number;
   ratingMin: number;
