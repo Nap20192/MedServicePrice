@@ -41,6 +41,7 @@ interface AggregatedPrice {
   rating?: number | null;
   reviews_count?: number | null;
   service_name_norm: string;
+  service_name_raw?: string | null;
   category: string;
   price_kzt: number;
   currency?: 'KZT' | 'USD';
@@ -73,6 +74,7 @@ function toMedService(p: AggregatedPrice): MedService {
     reviews_count: p.reviews_count ?? null,
     service_id: p.price_id,
     service_name_norm: p.service_name_norm,
+    service_name_raw: p.service_name_raw ?? '',
     category: toCategory(p.category),
     price_kzt: p.price_kzt,
     currency: p.currency ?? 'KZT',
@@ -255,6 +257,8 @@ export interface BranchInput {
   address?: string;
   phone?: string;
   working_hours?: string;
+  lat?: number;
+  lng?: number;
 }
 
 // Create many branch clinics under one source/network — same name, shared service pool.

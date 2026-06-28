@@ -14,6 +14,7 @@ import {
   updateSchedulerSettings,
 } from '../api/api';
 import { ClinicRecord, GooglePlaceClinicCandidate, SourceDetails } from '../types';
+import BranchMapPicker from '../components/BranchMapPicker';
 
 const emptyClinic = {
   name: '',
@@ -385,6 +386,14 @@ export default function SourcesPage() {
               <button type="button" disabled={savingScheduler || intervalHours < 1} onClick={saveScheduler} className={buttonDark}>{savingScheduler ? '...' : 'Сохранить'}</button>
             </div>
           </section>
+        </div>
+
+        <div className="mb-6">
+          <BranchMapPicker
+            sources={sources}
+            onDone={refresh}
+            notify={(msg, isError) => { if (isError) { setError(msg); setMessage(null); } else { setMessage(msg); setError(null); } }}
+          />
         </div>
 
         <form onSubmit={submitBranches} className="bg-white border border-neutral-200 p-5 space-y-4 mb-6">

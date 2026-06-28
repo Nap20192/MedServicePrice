@@ -93,6 +93,7 @@ func (r *priceRepo) SearchPrices(ctx context.Context, p domain.PriceSearch) ([]d
 			c.rating,
 			c.reviews_count,
 			sc.name_norm AS service_name_norm,
+			o.service_name_raw,
 			sc.category,
 			o.price_kzt,
 			o.currency,

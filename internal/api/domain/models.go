@@ -107,6 +107,7 @@ type AggregatedPrice struct {
 	Rating          *float64  `db:"rating" json:"rating,omitempty"`
 	ReviewsCount    *int      `db:"reviews_count" json:"reviews_count,omitempty"`
 	ServiceNameNorm string    `db:"service_name_norm" json:"service_name_norm"`
+	ServiceNameRaw  *string   `db:"service_name_raw" json:"service_name_raw,omitempty"`
 	Category        string    `db:"category" json:"category"`
 	PriceKZT        float64   `db:"price_kzt" json:"price_kzt"`
 	Currency        string    `db:"currency" json:"currency"`

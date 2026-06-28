@@ -250,6 +250,44 @@ func (s *Service) ProcessSource(ctx context.Context, sourceID uuid.UUID, meta Ta
 		id     uuid.UUID
 		method string
 	}{}
+
+	// Pre-pass: resolve every distinct unbound name in ONE round-trip instead of a
+	// Match query per row. Misses still fall through to the (per-row) LLM curator.
+	seenNames := map[string]struct{}{}
+	var batchNames []string
+	for _, row := range rows {
+		if row.CatalogID != nil && *row.CatalogID != uuid.Nil {
+			continue
+		}
+		name := strings.TrimSpace(row.Name)
+		if name == "" || len([]rune(name)) > maxCatalogNameLen {
+			continue
+		}
+		key := strings.ToLower(name)
+		if _, ok := seenNames[key]; ok {
+			continue
+		}
+		seenNames[key] = struct{}{}
+		batchNames = append(batchNames, row.Name)
+	}
+	if len(batchNames) > 0 {
+		results, err := s.repo.MatchBatch(ctx, batchNames)
+		if err != nil {
+			return errors.Wrap(err, "batch match")
+		}
+		for _, m := range results {
+			entry := struct {
+				id     uuid.UUID
+				method string
+			}{id: uuid.Nil, method: ndomain.MatchNone}
+			if m.CatalogID != nil && m.Method != nil {
+				entry.id, entry.method = *m.CatalogID, *m.Method
+			}
+			matchCache[strings.ToLower(strings.TrimSpace(m.Name))] = entry
+		}
+	}
+
+	binds := make([]ndomain.BindPair, 0, len(rows))
 	for i, row := range rows {
 		catalogID, method := uuid.Nil, ndomain.MatchNone
 		if row.CatalogID != nil && *row.CatalogID != uuid.Nil {
@@ -313,14 +351,13 @@ func (s *Service) ProcessSource(ctx context.Context, sourceID uuid.UUID, meta Ta
 			categoryCounts[*row.Category]++
 		}
 		if row.CatalogID == nil || *row.CatalogID != catalogID {
-			if err := s.repo.BindParsed(ctx, row.ID, catalogID); err != nil {
-				return errors.Wrap(err, "bind parsed row")
-			}
+			binds = append(binds, ndomain.BindPair{RowID: row.ID, CatalogID: catalogID})
 		}
 
 		if cur, ok := offers[catalogID]; !ok || row.PriceKZT < cur.PriceKZT {
 			offers[catalogID] = ndomain.Offer{
 				CatalogID:    catalogID,
+				NameRaw:      strings.TrimSpace(row.Name),
 				PriceKZT:     row.PriceKZT,
 				Currency:     row.Currency,
 				DurationDays: row.DurationDays,
@@ -328,6 +365,11 @@ func (s *Service) ProcessSource(ctx context.Context, sourceID uuid.UUID, meta Ta
 			}
 		}
 		progressLog(s.log, source.URL, i+1, len(rows), matched, created, offers, started)
+	}
+
+	// Flush all catalog bindings in one statement (was a per-row UPDATE).
+	if err := s.repo.BulkBindParsed(ctx, binds); err != nil {
+		return errors.Wrap(err, "bulk bind parsed rows")
 	}
 
 	list := make([]ndomain.Offer, 0, len(offers))

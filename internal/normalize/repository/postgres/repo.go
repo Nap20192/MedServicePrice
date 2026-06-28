@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 
@@ -179,6 +180,73 @@ func (r *repository) BindParsed(ctx context.Context, rowID, catalogID uuid.UUID)
 	return err
 }
 
+// MatchBatch runs the deterministic cascade for many names in one round-trip via a
+// LATERAL join over a VALUES list — eliminating N separate Match queries.
+func (r *repository) MatchBatch(ctx context.Context, names []string) ([]ndomain.BatchMatch, error) {
+	out := make([]ndomain.BatchMatch, 0, len(names))
+	const chunk = 400
+	for start := 0; start < len(names); start += chunk {
+		end := start + chunk
+		if end > len(names) {
+			end = len(names)
+		}
+		batch := names[start:end]
+		vals := make([]string, len(batch))
+		args := make([]any, len(batch))
+		for i, n := range batch {
+			vals[i] = fmt.Sprintf("($%d::text)", i+1)
+			args[i] = n
+		}
+		q := `
+			SELECT inp.name AS name, m.id AS id, m.method AS method
+			FROM (VALUES ` + strings.Join(vals, ",") + `) AS inp(name)
+			LEFT JOIN LATERAL (
+				WITH key AS (SELECT msp_name_key(inp.name) AS value),
+				matches AS (
+					SELECT sa.service_catalog_id AS id, 'alias' AS method, 1 AS priority, 1::float AS score
+					FROM service_aliases sa, key WHERE sa.alias_key = key.value
+					UNION ALL
+					SELECT sc.id, 'catalog', 2, 1::float FROM services_catalog sc, key WHERE sc.name_key = key.value
+					UNION ALL
+					SELECT sc.id, 'fuzzy', 3, similarity(sc.name_norm, inp.name)
+					FROM services_catalog sc WHERE similarity(sc.name_norm, inp.name) > 0.62
+				)
+				SELECT id, method FROM matches ORDER BY priority, score DESC LIMIT 1
+			) m ON true`
+		var chunkRes []ndomain.BatchMatch
+		if err := r.db.SelectContext(ctx, &chunkRes, q, args...); err != nil {
+			return nil, err
+		}
+		out = append(out, chunkRes...)
+	}
+	return out, nil
+}
+
+// BulkBindParsed sets service_catalog_id for many rows in one statement.
+func (r *repository) BulkBindParsed(ctx context.Context, pairs []ndomain.BindPair) error {
+	const chunk = 400
+	for start := 0; start < len(pairs); start += chunk {
+		end := start + chunk
+		if end > len(pairs) {
+			end = len(pairs)
+		}
+		batch := pairs[start:end]
+		vals := make([]string, len(batch))
+		args := make([]any, 0, len(batch)*2)
+		for i, p := range batch {
+			vals[i] = fmt.Sprintf("($%d::uuid,$%d::uuid)", 2*i+1, 2*i+2)
+			args = append(args, p.RowID, p.CatalogID)
+		}
+		q := `UPDATE parsed_services AS p SET service_catalog_id = v.cid
+			FROM (VALUES ` + strings.Join(vals, ",") + `) AS v(rid, cid)
+			WHERE p.id = v.rid`
+		if _, err := r.db.ExecContext(ctx, q, args...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (r *repository) MarkNormalized(ctx context.Context, sourceID uuid.UUID) error {
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE parsed_services SET normalized_at = now() WHERE source_id = $1 AND is_active`, sourceID)
@@ -207,7 +275,10 @@ func (r *repository) PublishOffers(ctx context.Context, sourceID uuid.UUID, city
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, sourceID.String()); err != nil {
+	// Global (constant) lock serializes the publish step across all sources. Concurrent
+	// publishes take FK SHARE locks on the same shared services_catalog rows in
+	// different orders → deadlock; serializing the (fast, bulk) publish avoids it.
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(727274001)`); err != nil {
 		return err
 	}
 
@@ -218,9 +289,10 @@ func (r *repository) PublishOffers(ctx context.Context, sourceID uuid.UUID, city
 
 	const upsert = `
 		INSERT INTO service_offers
-			(source_id, service_catalog_id, city, price_kzt, currency, duration_days, parsed_at, updated_at, is_active)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, true)
+			(source_id, service_catalog_id, service_name_raw, city, price_kzt, currency, duration_days, parsed_at, updated_at, is_active)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, true)
 		ON CONFLICT (source_id, service_catalog_id) DO UPDATE SET
+			service_name_raw = EXCLUDED.service_name_raw,
 			city          = EXCLUDED.city,
 			price_kzt     = EXCLUDED.price_kzt,
 			currency      = EXCLUDED.currency,
@@ -233,7 +305,7 @@ func (r *repository) PublishOffers(ctx context.Context, sourceID uuid.UUID, city
 	})
 	for _, o := range offers {
 		if _, err := tx.ExecContext(ctx, upsert,
-			sourceID, o.CatalogID, city, o.PriceKZT, o.Currency, o.DurationDays, o.ParsedAt); err != nil {
+			sourceID, o.CatalogID, o.NameRaw, city, o.PriceKZT, o.Currency, o.DurationDays, o.ParsedAt); err != nil {
 			return err
 		}
 	}

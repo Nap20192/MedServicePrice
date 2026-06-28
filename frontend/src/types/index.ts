@@ -18,6 +18,7 @@ export interface MedService {
   reviews_count: number | null;
   service_id: string;
   service_name_norm: string;
+  service_name_raw: string;
   category: ServiceCategory;
   price_kzt: number;
   currency: 'KZT' | 'USD';

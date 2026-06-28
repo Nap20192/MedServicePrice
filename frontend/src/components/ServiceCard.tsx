@@ -28,6 +28,11 @@ export default function ServiceCard({ service, showCity = false }: ServiceCardPr
           {/* Service name + category */}
           <div className="flex items-start gap-2 mb-2">
             <p className="font-medium text-neutral-900 leading-snug">{service.service_name_norm}</p>
+            {service.service_name_raw && service.service_name_raw !== service.service_name_norm && (
+              <p className="text-xs text-neutral-400 mt-0.5 truncate" title={service.service_name_raw}>
+                на сайте: «{service.service_name_raw}»
+              </p>
+            )}
           </div>
 
           <div className="flex items-center gap-2 flex-wrap mb-3">

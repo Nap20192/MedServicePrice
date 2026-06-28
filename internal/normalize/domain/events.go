@@ -40,9 +40,24 @@ type RawRow struct {
 	ParsedAt     time.Time  `db:"parsed_at"`
 }
 
+// BatchMatch is one result of MatchBatch: a raw name and its deterministic match
+// (CatalogID nil = no match).
+type BatchMatch struct {
+	Name      string     `db:"name"`
+	CatalogID *uuid.UUID `db:"id"`
+	Method    *string    `db:"method"`
+}
+
+// BindPair links a raw row to a catalog id for bulk binding.
+type BindPair struct {
+	RowID     uuid.UUID
+	CatalogID uuid.UUID
+}
+
 // Offer is a normalized, catalog-bound price ready to publish to the gold table.
 type Offer struct {
 	CatalogID    uuid.UUID
+	NameRaw      string // raw name of the (cheapest) source row behind this offer
 	PriceKZT     float64
 	Currency     string
 	DurationDays *int
@@ -103,8 +118,13 @@ type Repository interface {
 	// Match resolves a raw name to a catalog id via alias -> exact -> fuzzy.
 	// Returns uuid.Nil + MatchNone on a miss.
 	Match(ctx context.Context, rawName string) (uuid.UUID, string, error)
+	// MatchBatch resolves many raw names in a single round-trip (deterministic cascade
+	// only). A name with no match comes back with a nil CatalogID.
+	MatchBatch(ctx context.Context, names []string) ([]BatchMatch, error)
 	// BindParsed links a raw row to its catalog id (traceability in the raw layer).
 	BindParsed(ctx context.Context, rowID, catalogID uuid.UUID) error
+	// BulkBindParsed binds many rows in one statement (replaces N per-row updates).
+	BulkBindParsed(ctx context.Context, pairs []BindPair) error
 	// MarkNormalized stamps normalized_at on every active row of a source, so the
 	// raw layer records that normalize has seen them (matched or not).
 	MarkNormalized(ctx context.Context, sourceID uuid.UUID) error
