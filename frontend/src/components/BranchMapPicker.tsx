@@ -28,7 +28,6 @@ export default function BranchMapPicker({ sources, onDone, notify }: Props) {
   const [sourceId, setSourceId] = useState('');
   const [name, setName] = useState('');
   const [query, setQuery] = useState('');
-  const [location, setLocation] = useState('76.92861,43.23895'); // lon,lat (Almaty)
   const [candidates, setCandidates] = useState<GooglePlaceClinicCandidate[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [searching, setSearching] = useState(false);
@@ -49,10 +48,10 @@ export default function BranchMapPicker({ sources, onDone, notify }: Props) {
     if (!query.trim()) return;
     setSearching(true);
     try {
-      const res = await searchGooglePlacesClinics(query.trim(), location.trim());
+      const res = await searchGooglePlacesClinics(query.trim());
       setCandidates(res);
       setSelected(new Set());
-      notify(`Найдено клиник: ${res.length}`);
+      notify(`Найдено филиалов по Казахстану: ${res.length}`);
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Поиск не сработал', true);
     } finally {
@@ -96,14 +95,12 @@ export default function BranchMapPicker({ sources, onDone, notify }: Props) {
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Имя сети (для всех филиалов)"
             className="border border-neutral-300 px-3 py-2 text-sm focus:outline-none focus:border-neutral-900" />
         </div>
-        <form onSubmit={search} className="grid sm:grid-cols-[1fr_180px_auto] gap-2">
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Поиск клиник (Google Maps), напр. «инвитро алматы»"
+        <form onSubmit={search} className="grid sm:grid-cols-[1fr_auto] gap-2">
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Сеть по всему Казахстану, напр. «инвитро» — найдёт все филиалы"
             className="border border-neutral-300 px-3 py-2 text-sm focus:outline-none focus:border-neutral-900" />
-          <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="lon,lat"
-            className="border border-neutral-300 px-3 py-2 text-sm font-mono focus:outline-none focus:border-neutral-900" />
           <button type="submit" disabled={searching}
-            className="border border-neutral-900 bg-neutral-900 text-white px-4 py-2 text-sm hover:bg-neutral-700 disabled:bg-neutral-300 transition-colors">
-            {searching ? '…' : 'Найти'}
+            className="border border-neutral-900 bg-neutral-900 text-white px-5 py-2 text-sm hover:bg-neutral-700 disabled:bg-neutral-300 transition-colors">
+            {searching ? '…' : 'Найти филиалы'}
           </button>
         </form>
       </div>

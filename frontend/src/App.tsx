@@ -6,6 +6,7 @@ import ComparisonDrawer from './components/ComparisonDrawer';
 import HomePage from './pages/HomePage';
 import SearchPage from './pages/SearchPage';
 import ClinicPage from './pages/ClinicPage';
+import ClinicsPage from './pages/ClinicsPage';
 import SourcesPage from './pages/SourcesPage';
 import BranchesPage from './pages/BranchesPage';
 
@@ -19,6 +20,7 @@ function App() {
             <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/search" element={<SearchPage />} />
+              <Route path="/clinics" element={<ClinicsPage />} />
               <Route path="/clinic/:id" element={<ClinicPage />} />
               <Route path="/sources" element={<SourcesPage />} />
               <Route path="/sources/:sourceId/branches" element={<BranchesPage />} />

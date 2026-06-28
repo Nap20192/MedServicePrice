@@ -67,13 +67,11 @@ export default function SearchPage() {
 
   useEffect(() => { setPage(1); }, [query, JSON.stringify(filters), sort]);
 
-  const handleSearch = useCallback((q: string, city: string) => {
+  const handleSearch = useCallback((q: string) => {
     const params = new URLSearchParams();
     if (q) params.set('query', q);
-    if (city && city !== 'Все города') params.set('city', city);
     setSearchParams(params);
     setQuery(q);
-    setFilters((p) => ({ ...p, city }));
   }, [setSearchParams]);
 
   const updateFilter = <K extends keyof SearchFilters>(key: K, value: SearchFilters[K]) =>
@@ -84,7 +82,7 @@ export default function SearchPage() {
       {/* Search bar strip */}
       <div className="border-b border-neutral-200 bg-neutral-50 sticky top-14 z-30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3">
-          <SearchBar initialQuery={query} initialCity={filters.city} onSearch={handleSearch} compact />
+          <SearchBar initialQuery={query} onSearch={handleSearch} compact />
         </div>
       </div>
 

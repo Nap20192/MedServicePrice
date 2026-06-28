@@ -330,63 +330,20 @@ export default function SourcesPage() {
           </form>
         </div>
 
-        <div className="grid xl:grid-cols-[1.2fr_0.8fr] gap-px bg-neutral-200 border border-neutral-200 mb-6">
-          <section className="bg-white p-5">
-            <form onSubmit={searchGooglePlaces} className="grid lg:grid-cols-[1fr_220px_auto] gap-3 items-end">
-              <label className="block">
-                <span className="label block mb-1">Google Maps поиск</span>
-                <input value={googlePlacesQuery} onChange={(e) => setGooglePlacesQuery(e.target.value)} className={`${field} w-full`} placeholder="invitro Алматы" />
-              </label>
-              <label className="block">
-                <span className="label block mb-1">Локация lon,lat</span>
-                <input value={googlePlacesLocation} onChange={(e) => setGooglePlacesLocation(e.target.value)} className={`${field} w-full font-mono`} placeholder="76.92861,43.23895" />
-              </label>
-              <button type="submit" disabled={searchingGooglePlaces} className={buttonDark}>{searchingGooglePlaces ? 'Поиск...' : 'Найти'}</button>
-            </form>
-
-            <div className="mt-4 flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
-              <select value={googlePlacesSourceID} onChange={(e) => setGooglePlacesSourceID(e.target.value)} className={`${field} min-w-72`}>
-                <option value="">Импорт без привязки к URL</option>
-                {sources.map((source) => <option key={source.id} value={source.id}>{source.url}</option>)}
-              </select>
-              <p className="label">{googlePlacesResults.length} результатов</p>
-            </div>
-
-            <div className="mt-4 border border-neutral-200 divide-y divide-neutral-100">
-              {googlePlacesResults.length === 0 ? (
-                <p className="px-4 py-8 text-center text-sm text-neutral-400">Результаты Google Maps появятся здесь</p>
-              ) : googlePlacesResults.map((item) => (
-                <div key={item.id} className="p-4 grid md:grid-cols-[1fr_auto] gap-3 md:items-center">
-                  <div className="min-w-0">
-                    <p className="font-medium text-neutral-900">{item.name}</p>
-                    <p className="mt-1 text-sm text-neutral-500">{[item.city, item.address, item.phone].filter(Boolean).join(' · ') || 'без адреса'}</p>
-                    <p className="label mt-1">
-                      {[item.rating ? `рейтинг ${item.rating}` : '', item.reviews_count ? `${item.reviews_count} отзывов` : '', item.url ? sourceHost(item.url) : ''].filter(Boolean).join(' · ') || item.id}
-                    </p>
-                  </div>
-                  <button type="button" disabled={busyId === item.id} onClick={() => importGooglePlaces(item)} className={buttonLight}>
-                    {busyId === item.id ? 'Импорт...' : 'Импорт'}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="bg-white p-5 space-y-5">
-            <div>
-              <p className="label">Scheduler</p>
-              <h2 className="font-semibold text-neutral-900">Автозапуск fetch</h2>
-              <p className="text-sm text-neutral-500 mt-1">По умолчанию раз в сутки. Интервал хранится в БД и меняется из UI.</p>
-            </div>
-            <div className="flex items-end gap-3">
-              <label className="block">
-                <span className="label block mb-1">Интервал, часов</span>
-                <input value={intervalHours} min={1} type="number" onChange={(e) => setIntervalHours(Number(e.target.value))} className={`${field} w-32 font-mono`} />
-              </label>
-              <button type="button" disabled={savingScheduler || intervalHours < 1} onClick={saveScheduler} className={buttonDark}>{savingScheduler ? '...' : 'Сохранить'}</button>
-            </div>
-          </section>
-        </div>
+        <section className="bg-white border border-neutral-200 p-5 mb-6 flex flex-col sm:flex-row sm:items-end gap-4 justify-between">
+          <div>
+            <p className="label">Scheduler</p>
+            <h2 className="font-semibold text-neutral-900">Автозапуск fetch</h2>
+            <p className="text-sm text-neutral-500 mt-1">По умолчанию раз в сутки. Интервал хранится в БД и меняется из UI.</p>
+          </div>
+          <div className="flex items-end gap-3">
+            <label className="block">
+              <span className="label block mb-1">Интервал, часов</span>
+              <input value={intervalHours} min={1} type="number" onChange={(e) => setIntervalHours(Number(e.target.value))} className={`${field} w-32 font-mono`} />
+            </label>
+            <button type="button" disabled={savingScheduler || intervalHours < 1} onClick={saveScheduler} className={buttonDark}>{savingScheduler ? '...' : 'Сохранить'}</button>
+          </div>
+        </section>
 
         <div className="mb-6">
           <BranchMapPicker
@@ -395,33 +352,6 @@ export default function SourcesPage() {
             notify={(msg, isError) => { if (isError) { setError(msg); setMessage(null); } else { setMessage(msg); setError(null); } }}
           />
         </div>
-
-        <form onSubmit={submitBranches} className="bg-white border border-neutral-200 p-5 space-y-4 mb-6">
-          <div>
-            <p className="label">Clinic network</p>
-            <h2 className="font-semibold text-neutral-900">Филиалы сети с общим источником услуг</h2>
-            <p className="text-sm text-neutral-500 mt-1">Один source может обслуживать несколько филиалов; предложения привязываются по городу.</p>
-          </div>
-          <div className="grid md:grid-cols-[1fr_1fr] gap-3">
-            <select value={branchSourceID} onChange={(e) => setBranchSourceID(e.target.value)} required className={`${field} w-full`}>
-              <option value="">Источник сети...</option>
-              {sources.map((source) => <option key={source.id} value={source.id}>{source.url}</option>)}
-            </select>
-            <input value={branchName} onChange={(e) => setBranchName(e.target.value)} required placeholder="Имя сети для всех филиалов" className={`${field} w-full`} />
-          </div>
-          <textarea
-            value={branchLines}
-            onChange={(e) => setBranchLines(e.target.value)}
-            required
-            rows={4}
-            className={`${field} w-full`}
-            placeholder={'Алматы; ул. Абая 1\nАстана; пр. Кабанбай 2\nШымкент; ул. Тауке хана 5'}
-          />
-          <div className="flex items-center justify-between gap-3">
-            <p className="label">Формат строки: город; адрес</p>
-            <button type="submit" disabled={savingBranches} className={buttonDark}>{savingBranches ? 'Создание...' : 'Создать филиалы'}</button>
-          </div>
-        </form>
 
         <section className="bg-white border border-neutral-200 overflow-x-auto">
           <div className="px-4 py-3 border-b border-neutral-200 flex items-center justify-between">

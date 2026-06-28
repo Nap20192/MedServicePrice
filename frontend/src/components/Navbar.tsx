@@ -5,6 +5,7 @@ import { useComparison } from '../context/ComparisonContext';
 const NAV = [
   { to: '/', label: 'Главная' },
   { to: '/search', label: 'Поиск' },
+  { to: '/clinics', label: 'Клиники' },
   { to: '/sources', label: 'Источники' },
 ];
 
