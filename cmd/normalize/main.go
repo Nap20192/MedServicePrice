@@ -48,7 +48,9 @@ func buildLLM(log rabbitmq.Logger) domain.LLMMatcher {
 		log.Info("LLM fallback disabled (set LLM_BASE_URL/LLM_API_KEY/LLM_MODEL to enable)")
 		return nil
 	}
-	log.Info("LLM fallback enabled", "model", os.Getenv("LLM_MODEL"), "min_confidence", minConf)
+	log.Info("LLM fallback enabled for normalize",
+		"model", os.Getenv("LLM_MODEL"),
+		"confidence_threshold", minConf)
 	return c
 }
 
@@ -70,11 +72,11 @@ func main() {
 	}
 	db, err := database.NewDB(dbURL)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		log.Fatalf("normalize could not connect to PostgreSQL: %v", err)
 	}
 	defer db.Close()
 	if err := db.Ping(context.Background()); err != nil {
-		log.Fatalf("Failed to ping database: %v", err)
+		log.Fatalf("normalize could not reach PostgreSQL: %v", err)
 	}
 	appLogger.Info("normalize connected to PostgreSQL")
 
@@ -84,7 +86,7 @@ func main() {
 	}
 	conn, err := rabbitmq.NewRabbitMQConn(rabbitmq.RabbitMQConnStr(rabbitURL), appLogger)
 	if err != nil {
-		log.Fatalf("Failed to connect to rabbitmq: %v", err)
+		log.Fatalf("normalize could not connect to RabbitMQ: %v", err)
 	}
 	defer conn.Close()
 
@@ -100,7 +102,7 @@ func main() {
 	)
 
 	go func() {
-		appLogger.Info("normalize consuming q.parse.completed")
+		appLogger.Info("normalize started consuming completed parse events")
 		if err := c.StartConsumer(cons.Handler); err != nil {
 			appLogger.Error("normalize consumer stopped", "err", err)
 		}

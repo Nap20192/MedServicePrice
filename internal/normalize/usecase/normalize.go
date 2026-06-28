@@ -46,7 +46,7 @@ func (s *Service) ProcessPending(ctx context.Context, limit int) (int, error) {
 	s.log.Info("normalize sweep found pending sources", "count", len(ids))
 	for i, sourceID := range ids {
 		if err := s.ProcessSource(ctx, sourceID, TaskMeta{Trigger: "sweep"}); err != nil {
-			return i, errors.Wrapf(err, "normalize pending source %s", sourceID)
+			return i, errors.Wrap(err, "normalize pending source")
 		}
 	}
 	return len(ids), nil
@@ -60,9 +60,12 @@ func (s *Service) ProcessParseCompleted(ctx context.Context, body []byte) error 
 	if err := json.Unmarshal(body, &p); err != nil {
 		return errors.Wrap(err, "unmarshal parse.completed")
 	}
+	if p.SourceID == "" {
+		return errors.New("parse.completed missing source_id")
+	}
 	sourceID, err := uuid.Parse(p.SourceID)
 	if err != nil {
-		return errors.Wrapf(err, "bad source_id %q", p.SourceID)
+		return errors.Wrap(err, "bad source_id in parse.completed")
 	}
 
 	return s.ProcessSource(ctx, sourceID, TaskMeta{
@@ -80,13 +83,6 @@ func (s *Service) ProcessSource(ctx context.Context, sourceID uuid.UUID, meta Ta
 	if !meta.ParsedAt.IsZero() {
 		parsedAt = meta.ParsedAt.Format(time.RFC3339)
 	}
-	s.log.Info("normalize task received",
-		"trigger", meta.Trigger,
-		"msg_id", meta.MsgID,
-		"adapter_id", meta.AdapterID,
-		"source_id", sourceID.String(),
-		"worker_rows_written", meta.RowsWritten,
-		"worker_parsed_at", parsedAt)
 
 	source, found, err := s.repo.SourceInfo(ctx, sourceID)
 	if err != nil {
@@ -95,18 +91,23 @@ func (s *Service) ProcessSource(ctx context.Context, sourceID uuid.UUID, meta Ta
 	if !found {
 		// Unknown source — registration missing/not yet committed. Skip (ack) instead
 		// of dead-lettering; a retry can't help and would only spam the DLX.
-		s.log.Info("normalize skipped unknown source",
-			"source_id", sourceID.String(),
-			"msg_id", meta.MsgID)
+		s.log.Info("normalize skipped unknown source record", "trigger", meta.Trigger)
 		return nil
 	}
+
+	s.log.Info("normalize task received",
+		"trigger", meta.Trigger,
+		"source_url", source.URL,
+		"clinic", valueOr(source.ClinicName, "unassigned"),
+		"city", valueOr(source.City, "unknown"),
+		"worker_rows_written", meta.RowsWritten,
+		"worker_parsed_at", parsedAt)
 
 	rows, err := s.repo.LoadActiveRows(ctx, sourceID)
 	if err != nil {
 		return errors.Wrap(err, "load active rows")
 	}
 	s.log.Info("normalize loaded raw rows",
-		"source_id", sourceID.String(),
 		"source_url", source.URL,
 		"clinic", valueOr(source.ClinicName, "unassigned"),
 		"city", valueOr(source.City, "unknown"),
@@ -120,7 +121,7 @@ func (s *Service) ProcessSource(ctx context.Context, sourceID uuid.UUID, meta Ta
 		}
 		s.log.Info("normalize loaded catalog for llm",
 			"entries", len(catalog),
-			"source_id", sourceID.String())
+			"source_url", source.URL)
 	}
 
 	// Dedup raw rows that collapse to the same catalog service: keep the cheapest.
@@ -172,10 +173,10 @@ func (s *Service) ProcessSource(ctx context.Context, sourceID uuid.UUID, meta Ta
 			}
 			if unmatched <= 5 {
 				s.log.Info("normalize unmatched sample",
-					"source_id", sourceID.String(),
+					"source_url", source.URL,
 					"raw", row.Name)
 			}
-			progressLog(s.log, sourceID.String(), i+1, len(rows), matched, unmatched, offers, started)
+			progressLog(s.log, source.URL, i+1, len(rows), matched, unmatched, offers, started)
 			continue
 		}
 		matched++
@@ -196,7 +197,7 @@ func (s *Service) ProcessSource(ctx context.Context, sourceID uuid.UUID, meta Ta
 				ParsedAt:     row.ParsedAt,
 			}
 		}
-		progressLog(s.log, sourceID.String(), i+1, len(rows), matched, unmatched, offers, started)
+		progressLog(s.log, source.URL, i+1, len(rows), matched, unmatched, offers, started)
 	}
 
 	list := make([]ndomain.Offer, 0, len(offers))
@@ -214,7 +215,6 @@ func (s *Service) ProcessSource(ctx context.Context, sourceID uuid.UUID, meta Ta
 
 	s.log.Info("RESULT normalize completed",
 		"trigger", meta.Trigger,
-		"source_id", sourceID.String(),
 		"source_url", source.URL,
 		"clinic", valueOr(source.ClinicName, "unassigned"),
 		"city", valueOr(source.City, "unknown"),
@@ -232,7 +232,7 @@ func (s *Service) ProcessSource(ctx context.Context, sourceID uuid.UUID, meta Ta
 	return nil
 }
 
-func progressLog(log rabbitmq.Logger, sourceID string, done, total, matched, unmatched int, offers map[uuid.UUID]ndomain.Offer, started time.Time) {
+func progressLog(log rabbitmq.Logger, sourceLabel string, done, total, matched, unmatched int, offers map[uuid.UUID]ndomain.Offer, started time.Time) {
 	if total < 500 {
 		return
 	}
@@ -240,7 +240,7 @@ func progressLog(log rabbitmq.Logger, sourceID string, done, total, matched, unm
 		return
 	}
 	log.Info("normalize progress",
-		"source_id", sourceID,
+		"source_url", sourceLabel,
 		"done", done,
 		"total", total,
 		"matched", matched,

@@ -25,26 +25,19 @@ func NewConsumer(svc *usecase.Service, log rabbitmq.Logger) *Consumer {
 func (c *Consumer) Handler(ctx context.Context, messages <-chan amqp.Delivery) {
 	for msg := range messages {
 		c.log.Info("normalize delivery received",
-			"routing_key", msg.RoutingKey,
-			"message_id", msg.MessageId,
 			"type", msg.Type,
 			"bytes", len(msg.Body))
 		if err := c.svc.ProcessParseCompleted(ctx, msg.Body); err != nil {
 			c.log.Error("normalize failed — dead-lettering",
-				"message_id", msg.MessageId,
-				"routing_key", msg.RoutingKey,
+				"type", msg.Type,
 				"err", err)
 			_ = msg.Nack(false, false)
 			continue
 		}
 		if err := msg.Ack(false); err != nil {
-			c.log.Error("normalize ack failed",
-				"message_id", msg.MessageId,
-				"err", err)
+			c.log.Error("normalize ack failed", "type", msg.Type, "err", err)
 			continue
 		}
-		c.log.Info("normalize delivery acked",
-			"message_id", msg.MessageId,
-			"routing_key", msg.RoutingKey)
+		c.log.Info("normalize delivery acked", "type", msg.Type)
 	}
 }

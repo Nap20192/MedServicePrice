@@ -48,19 +48,19 @@ func main() {
 	}
 	db, err := database.NewDB(dbURL)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		log.Fatalf("api could not connect to PostgreSQL: %v", err)
 	}
 	defer db.Close()
 	if err := db.Ping(context.Background()); err != nil {
-		log.Fatalf("Failed to ping database: %v", err)
+		log.Fatalf("api could not reach PostgreSQL: %v", err)
 	}
-	appLogger.Info("Connected to PostgreSQL")
+	appLogger.Info("api connected to PostgreSQL")
 
 	if shouldRunMigrations() {
 		if err := runMigrations(db); err != nil {
-			log.Fatalf("Failed to run database migrations: %v", err)
+			log.Fatalf("api could not apply database migrations: %v", err)
 		}
-		appLogger.Info("Database migrations applied")
+		appLogger.Info("api database migrations applied")
 	}
 
 	// 2. Initialize Repositories
@@ -77,13 +77,13 @@ func main() {
 	}
 	conn, err := rabbitmq.NewRabbitMQConn(rabbitmq.RabbitMQConnStr(rabbitURL), appLogger)
 	if err != nil {
-		log.Fatalf("Failed to connect to rabbitmq: %v", err)
+		log.Fatalf("api could not connect to RabbitMQ: %v", err)
 	}
 	defer conn.Close()
 
 	pub, err := publisher.NewPublisher(conn)
 	if err != nil {
-		log.Fatalf("Failed to create publisher: %v", err)
+		log.Fatalf("api could not create RabbitMQ publisher: %v", err)
 	}
 	adapterPublisher := pub.Configure(
 		publisher.ExchangeName("medprice.events"),
@@ -121,9 +121,9 @@ func main() {
 	}
 
 	go func() {
-		appLogger.Info("Starting HTTP server on port " + httpPort)
+		appLogger.Info("api HTTP server starting", "port", httpPort)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("HTTP server error: %v", err)
+			log.Fatalf("api HTTP server error: %v", err)
 		}
 	}()
 
@@ -132,9 +132,9 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	appLogger.Info("Shutting down...")
+	appLogger.Info("api shutting down")
 	if err := server.Shutdown(context.Background()); err != nil {
-		appLogger.Error("HTTP server shutdown error", "err", err)
+		appLogger.Error("api HTTP server shutdown error", "err", err)
 	}
 }
 

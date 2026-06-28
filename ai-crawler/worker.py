@@ -197,15 +197,16 @@ async def _register_source(con, adapter_id: str, name: str, base_url: str,
             "UPDATE adapters SET base_url=$2, domain=$3, config=$4, "
             "updated_at=now() WHERE adapter_id=$1",
             adapter_id, base_url, domain, json.dumps(config))
-        return str(existing["source_id"])
+        source_id = str(existing["source_id"])
+        log.info("adapter refreshed name=%s domain=%s", name or domain, domain)
+        return source_id
 
     if source_id and await _source_exists(con, source_id):
         await con.execute(
             "INSERT INTO adapters (adapter_id, domain, source_id, base_url, config) "
             "VALUES ($1, $2, $3, $4, $5)",
             adapter_id, domain, source_id, base_url, json.dumps(config))
-        log.info("registered existing source adapter_id=%s domain=%s source_id=%s",
-                 adapter_id, domain, source_id)
+        log.info("registered existing source name=%s domain=%s", name or domain, domain)
         return source_id
 
     clinic_id = await con.fetchval(
@@ -217,8 +218,7 @@ async def _register_source(con, adapter_id: str, name: str, base_url: str,
         "INSERT INTO adapters (adapter_id, domain, source_id, base_url, config) "
         "VALUES ($1, $2, $3, $4, $5)",
         adapter_id, domain, source_id, base_url, json.dumps(config))
-    log.info("registered source adapter_id=%s domain=%s source_id=%s",
-             adapter_id, domain, source_id)
+    log.info("registered source name=%s domain=%s", name or domain, domain)
     return str(source_id)
 
 
@@ -254,59 +254,58 @@ class Worker:
         self.event_lock = asyncio.Lock()
 
     async def handle_create(self, data: dict) -> None:
-        adapter_id = data["adapter_id"]
+        adapter_name = data.get("name") or "unknown adapter"
         base_url = data["base_url"]
         config = data.get("config") or {}
         _apply_run_knobs(config)
-        log.info("TASK adapter.create adapter_id=%s domain=%s", adapter_id, host(base_url))
+        log.info("adapter.create received name=%s domain=%s", adapter_name, host(base_url))
         await _ensure_adapter_ready(base_url, force_rediscover=_truthy(config.get("rediscover")))
         async with self.pool.acquire() as con:
             await _register_source(
                 con,
-                adapter_id,
-                data.get("name", ""),
+                data["adapter_id"],
+                adapter_name,
                 base_url,
                 config,
                 data.get("source_id"),
             )
 
     async def handle_fetch(self, data: dict) -> None:
-        adapter_id = data["adapter_id"]
+        adapter_name = data.get("name") or "unknown adapter"
         url = data["url"]
+        config = data.get("config") or {}
+        base_url = data.get("base_url") or url
+        _apply_run_knobs(config)
+        await _ensure_adapter_ready(
+            base_url,
+            force_rediscover=_truthy(config.get("rediscover")),
+        )
+
         source_id = None
-        if SINK in ("postgres", "both"):
-            async with self.pool.acquire() as con:
-                source_id = await _resolve_source(con, adapter_id, url)
+        async with self.pool.acquire() as con:
+            source_id = await _resolve_source(con, data["adapter_id"], url)
             if source_id is None:
-                config = data.get("config") or {}
-                base_url = data.get("base_url") or url
-                _apply_run_knobs(config)
-                log.warning("adapter missing for adapter_id=%s url=%s — creating first",
-                            adapter_id, url)
-                await _ensure_adapter_ready(base_url, force_rediscover=_truthy(config.get("rediscover")))
-                async with self.pool.acquire() as con:
-                    source_id = await _register_source(
-                        con,
-                        adapter_id,
-                        data.get("name", ""),
-                        base_url,
-                        config,
-                        data.get("source_id"),
-                    )
-            else:
-                config = data.get("config") or {}
-                _apply_run_knobs(config)
-                await _ensure_adapter_ready(
-                    data.get("base_url") or url,
-                    force_rediscover=_truthy(config.get("rediscover")),
+                log.warning("adapter missing — creating source name=%s domain=%s",
+                            adapter_name, host(url))
+                source_id = await _register_source(
+                    con,
+                    data["adapter_id"],
+                    adapter_name,
+                    base_url,
+                    config,
+                    data.get("source_id"),
                 )
         sink = build_sink(SINK, pool=self.pool, source_id=source_id)
-        log.info("TASK adapter.fetch adapter_id=%s domain=%s sink=%s", adapter_id, host(url), SINK)
+        log.info("adapter.fetch received name=%s domain=%s sink=%s", adapter_name, host(url), SINK)
         rows_written = await fetch(url, sink)
-        await self._publish_completed(adapter_id, source_id, rows_written)
+        if source_id is None:
+            log.error("skip parse.completed — source could not be resolved name=%s domain=%s",
+                      adapter_name, host(url))
+            return
+        await self._publish_completed(data["adapter_id"], source_id, rows_written, adapter_name, host(url))
 
     async def _publish_completed(self, adapter_id: str, source_id: str | None,
-                                 rows_written: int) -> None:
+                                 rows_written: int, adapter_name: str, domain: str) -> None:
         payload = {
             "schema_version": 1,
             "msg_id": str(uuid.uuid4()),
@@ -323,8 +322,8 @@ class Worker:
             ),
             routing_key=RK_COMPLETED,
         )
-        log.info("RESULT worker adapter_id=%s source_id=%s rows_written=%d event=%s",
-                 adapter_id, source_id, rows_written, RK_COMPLETED)
+        log.info("parse.completed published name=%s domain=%s rows_written=%d",
+                 adapter_name, domain, rows_written)
 
     # -- delivery wrapper ------------------------------------------------------
     def _consumer(self, handler):
@@ -340,20 +339,20 @@ class Worker:
             try:
                 async with self.pool.acquire() as con:
                     if await _already_processed(con, msg_id):
-                        log.info("skip already-processed msg_id=%s rk=%s", msg_id, rk)
+                        log.info("skip already-processed message rk=%s", rk)
                         await message.ack()
                         return
                 if self.event_lock.locked():
-                    log.info("event waiting rk=%s msg_id=%s", rk, msg_id)
+                    log.info("event waiting rk=%s", rk)
                 async with self.event_lock:
-                    log.info("event started rk=%s msg_id=%s", rk, msg_id)
+                    log.info("event started rk=%s", rk)
                     await handler(data)
-                    log.info("event finished rk=%s msg_id=%s", rk, msg_id)
+                    log.info("event finished rk=%s", rk)
                 async with self.pool.acquire() as con:
                     await _mark_processed(con, msg_id, rk)
                 await message.ack()
             except Exception:  # noqa: BLE001  — isolate: one bad source must not stop others
-                log.exception("handler failed rk=%s msg_id=%s — dead-lettering", rk, msg_id)
+                log.exception("handler failed rk=%s — dead-lettering", rk)
                 await message.reject(requeue=False)
         return on_message
 
