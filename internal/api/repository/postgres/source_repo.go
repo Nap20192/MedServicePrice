@@ -235,8 +235,24 @@ func (r *clinicRepo) GetClinicByID(ctx context.Context, id uuid.UUID) (*domain.C
 
 func (r *clinicRepo) ListClinics(ctx context.Context) ([]domain.Clinic, error) {
 	var clinics []domain.Clinic
-	query := `SELECT id, name, city, address, phone, working_hours, url, google_place_id, lat, lng, rating, reviews_count FROM clinics ORDER BY name`
+	query := `SELECT id, name, source_id, city, address, phone, working_hours, url, google_place_id, lat, lng, rating, reviews_count FROM clinics ORDER BY name`
 	if err := r.db.SelectContext(ctx, &clinics, query); err != nil {
+		return nil, err
+	}
+	if clinics == nil {
+		clinics = []domain.Clinic{}
+	}
+	return clinics, nil
+}
+
+func (r *clinicRepo) ListBranchesBySource(ctx context.Context, sourceID uuid.UUID) ([]domain.Clinic, error) {
+	var clinics []domain.Clinic
+	query := `
+		SELECT id, name, source_id, city, address, phone, working_hours, url, google_place_id, lat, lng, rating, reviews_count
+		FROM clinics
+		WHERE source_id = $1
+		ORDER BY city NULLS LAST, address NULLS LAST, name`
+	if err := r.db.SelectContext(ctx, &clinics, query, sourceID); err != nil {
 		return nil, err
 	}
 	if clinics == nil {

@@ -109,6 +109,17 @@ func (uc *sourceUC) AddBranches(ctx context.Context, sourceID uuid.UUID, name st
 	return out, nil
 }
 
+func (uc *sourceUC) ListBranches(ctx context.Context, sourceID uuid.UUID) ([]domain.Clinic, error) {
+	source, err := uc.sourceRepo.GetSourceByID(ctx, sourceID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load source: %w", err)
+	}
+	if source == nil {
+		return nil, fmt.Errorf("source not found")
+	}
+	return uc.clinicRepo.ListBranchesBySource(ctx, sourceID)
+}
+
 func (uc *sourceUC) CreateClinic(ctx context.Context, input domain.CreateClinicInput) (*domain.Clinic, error) {
 	if input.Name == "" {
 		return nil, fmt.Errorf("clinic name is required")

@@ -63,6 +63,7 @@ type SourceUseCase interface {
 	// AddBranches creates many branch clinics under one source/network — all sharing
 	// the given name and the source's crawled service pool, differing by location.
 	AddBranches(ctx context.Context, sourceID uuid.UUID, name string, branches []Clinic) ([]Clinic, error)
+	ListBranches(ctx context.Context, sourceID uuid.UUID) ([]Clinic, error)
 }
 
 type SchedulerUseCase interface {

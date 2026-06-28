@@ -20,6 +20,7 @@ type ClinicRepository interface {
 	UpsertClinic(ctx context.Context, clinic *Clinic, externalRaw []byte) error
 	GetClinicByID(ctx context.Context, id uuid.UUID) (*Clinic, error)
 	ListClinics(ctx context.Context) ([]Clinic, error)
+	ListBranchesBySource(ctx context.Context, sourceID uuid.UUID) ([]Clinic, error)
 	FindClinicByGooglePlaceID(ctx context.Context, googlePlaceID string) (*Clinic, error)
 	// We might need to find clinic by dedup key in real app, but for now name/city is a proxy
 	FindClinicByNameAndCity(ctx context.Context, name, city string) (*Clinic, error)

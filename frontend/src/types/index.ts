@@ -5,6 +5,7 @@
 export type ServiceCategory = 'лаборатория' | 'приём врача' | 'диагностика' | 'процедура';
 
 export interface MedService {
+  source_id: string;
   clinic_id: string;
   clinic_name: string;
   city: string;
@@ -63,6 +64,7 @@ export interface CreateSourceInput {
 export interface ClinicRecord {
   id: string;
   name: string;
+  source_id?: string | null;
   city?: string | null;
   address?: string | null;
   phone?: string | null;

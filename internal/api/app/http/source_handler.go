@@ -233,6 +233,21 @@ func (h *sourceHandler) AddBranches(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(clinics)
 }
 
+func (h *sourceHandler) ListBranches(w http.ResponseWriter, r *http.Request) {
+	sourceID, err := uuid.Parse(chi.URLParam(r, "sourceID"))
+	if err != nil {
+		http.Error(w, "invalid source id", http.StatusBadRequest)
+		return
+	}
+	clinics, err := h.usecase.ListBranches(r.Context(), sourceID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(clinics)
+}
+
 func (h *sourceHandler) RebuildAdapter(w http.ResponseWriter, r *http.Request) {
 	sourceID, err := uuid.Parse(chi.URLParam(r, "sourceID"))
 	if err != nil {

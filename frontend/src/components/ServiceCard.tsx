@@ -40,14 +40,12 @@ export default function ServiceCard({ service, showCity = false }: ServiceCardPr
               <span className={`w-1.5 h-1.5 rounded-full ${categoryDot[service.category] || 'bg-neutral-400'}`} />
               {service.category}
             </span>
-            <span className="label">{service.currency}</span>
             {service.duration_days !== null && (
               <span className="label">срок {service.duration_days} дн.</span>
             )}
             {service.rating !== null && (
               <span className="label">рейтинг {service.rating.toFixed(1)}{service.reviews_count ? ` / ${service.reviews_count}` : ''}</span>
             )}
-            {service.online_booking && <span className="label">онлайн-запись</span>}
           </div>
 
           {/* Clinic */}

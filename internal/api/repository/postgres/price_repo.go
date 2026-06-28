@@ -28,8 +28,8 @@ func (r *priceRepo) SearchPrices(ctx context.Context, p domain.PriceSearch) ([]d
 	// Reads the published gold table only. parsed_services (raw) is never touched
 	// here — the normalize service owns that layer.
 	//
-	// DISTINCT ON (clinic, service): one row per clinic+service (the cheapest), so a
-	// clinic that maps a service from several sources/cities is not shown twice.
+	// DISTINCT ON (source, service): one row per source+service (the cheapest), so
+	// branch clinics do not duplicate the same source in the public result list.
 	args := []any{}
 	where := "WHERE o.is_active = true"
 	argIdx := 1
@@ -77,10 +77,12 @@ func (r *priceRepo) SearchPrices(ctx context.Context, p domain.PriceSearch) ([]d
 	// Network model: branch clinics share a source (clinics.source_id, M:1). An offer
 	// (source + city) belongs to the source's branches in that city. LEFT JOIN so a
 	// source with no registered branch still shows (clinic falls back to the source).
-	// DISTINCT ON (branch-or-source, service): one cheapest row per branch+service.
+	// DISTINCT ON (source, service): one cheapest row per source+service. A single
+	// branch is kept only as representative contact/location data for the row.
 	dedup := `
-		SELECT DISTINCT ON (COALESCE(c.id, s.id), sc.id)
+		SELECT DISTINCT ON (o.source_id, sc.id)
 			o.id AS price_id,
+			o.source_id,
 			COALESCE(c.id, s.id) AS clinic_id,
 			COALESCE(c.name, s.url) AS clinic_name,
 			COALESCE(c.url, s.url) AS clinic_url,
@@ -105,7 +107,7 @@ func (r *priceRepo) SearchPrices(ctx context.Context, p domain.PriceSearch) ([]d
 			AND (c.city IS NULL OR o.city IS NULL OR c.city = o.city::text)
 		JOIN services_catalog sc ON o.service_catalog_id = sc.id
 		` + where + `
-		ORDER BY COALESCE(c.id, s.id), sc.id, o.price_kzt ASC`
+		ORDER BY o.source_id, sc.id, o.price_kzt ASC, c.name NULLS LAST, c.address NULLS LAST`
 
 	var total int
 	if err := r.db.GetContext(ctx, &total, `SELECT count(*) FROM (`+dedup+`) d`, args...); err != nil {

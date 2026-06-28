@@ -95,6 +95,7 @@ const (
 // parsed_services, so the API never exposes raw service names.
 type AggregatedPrice struct {
 	PriceID         uuid.UUID `db:"price_id" json:"price_id"`
+	SourceID        uuid.UUID `db:"source_id" json:"source_id"`
 	ClinicID        uuid.UUID `db:"clinic_id" json:"clinic_id"`
 	ClinicName      string    `db:"clinic_name" json:"clinic_name"`
 	ClinicURL       *string   `db:"clinic_url" json:"clinic_url,omitempty"`

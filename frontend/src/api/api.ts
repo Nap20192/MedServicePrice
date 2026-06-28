@@ -29,6 +29,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api
 // Бэкенд GET /prices возвращает AggregatedPrice (см. internal/api/domain/models.go).
 interface AggregatedPrice {
   price_id: string;
+  source_id: string;
   clinic_id: string;
   clinic_name: string;
   clinic_url?: string | null;
@@ -61,6 +62,7 @@ function toCategory(c: string): ServiceCategory {
 // отдаёт (телефон, часы, гео, категория, нормализованное имя), получают дефолты.
 function toMedService(p: AggregatedPrice): MedService {
   return {
+    source_id: p.source_id,
     clinic_id: p.clinic_id,
     clinic_name: p.clinic_name,
     city: p.city ?? '',
@@ -197,6 +199,10 @@ export async function createSource(input: CreateSourceInput): Promise<SourceComm
 
 export async function listClinics(): Promise<ClinicRecord[]> {
   return apiJson<ClinicRecord[]>('/clinics');
+}
+
+export async function listSourceBranches(sourceId: string): Promise<ClinicRecord[]> {
+  return apiJson<ClinicRecord[]>(`/sources/${sourceId}/branches`);
 }
 
 export async function createClinic(input: CreateClinicInput): Promise<ClinicRecord> {
