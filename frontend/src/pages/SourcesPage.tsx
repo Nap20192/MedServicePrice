@@ -1,19 +1,16 @@
 import React, { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
-  addBranches,
   attachSourceToClinic,
   createClinic,
   createSource,
   getSchedulerSettings,
-  importGooglePlaceClinic,
   listClinics,
   listSources,
   rebuildSourceAdapter,
-  searchGooglePlacesClinics,
   triggerSourceFetch,
   updateSchedulerSettings,
 } from '../api/api';
-import { ClinicRecord, GooglePlaceClinicCandidate, SourceDetails } from '../types';
+import { ClinicRecord, SourceDetails } from '../types';
 import BranchMapPicker from '../components/BranchMapPicker';
 
 const emptyClinic = {
@@ -58,19 +55,10 @@ export default function SourcesPage() {
   const [intervalHours, setIntervalHours] = useState(24);
   const [clinicForm, setClinicForm] = useState(emptyClinic);
   const [clinicSourceID, setClinicSourceID] = useState('');
-  const [googlePlacesQuery, setGooglePlacesQuery] = useState('');
-  const [googlePlacesLocation, setGooglePlacesLocation] = useState('76.92861,43.23895');
-  const [googlePlacesSourceID, setGooglePlacesSourceID] = useState('');
-  const [googlePlacesResults, setGooglePlacesResults] = useState<GooglePlaceClinicCandidate[]>([]);
-  const [branchSourceID, setBranchSourceID] = useState('');
-  const [branchName, setBranchName] = useState('');
-  const [branchLines, setBranchLines] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingClinic, setSavingClinic] = useState(false);
-  const [searchingGooglePlaces, setSearchingGooglePlaces] = useState(false);
   const [savingScheduler, setSavingScheduler] = useState(false);
-  const [savingBranches, setSavingBranches] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -137,66 +125,6 @@ export default function SourcesPage() {
       setError(err instanceof Error ? err.message : 'Не удалось добавить клинику');
     } finally {
       setSavingClinic(false);
-    }
-  };
-
-  const searchGooglePlaces = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!googlePlacesQuery.trim()) return;
-    setSearchingGooglePlaces(true);
-    setError(null);
-    setMessage(null);
-    try {
-      const results = await searchGooglePlacesClinics(googlePlacesQuery, googlePlacesLocation);
-      setGooglePlacesResults(results);
-      setMessage(`Google Maps: найдено ${results.length}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Google Maps поиск не сработал');
-    } finally {
-      setSearchingGooglePlaces(false);
-    }
-  };
-
-  const importGooglePlaces = async (candidate: GooglePlaceClinicCandidate) => {
-    setBusyId(candidate.id);
-    setError(null);
-    setMessage(null);
-    try {
-      const clinic = await importGooglePlaceClinic(candidate.id, googlePlacesSourceID ? [googlePlacesSourceID] : []);
-      setMessage(`Импортировано из Google Maps: ${clinic.name}`);
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось импортировать из Google Maps');
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const submitBranches = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!branchSourceID || !branchName.trim()) return;
-    const branches = branchLines
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => {
-        const [city, ...rest] = line.split(/[;,\t]/).map((s) => s.trim());
-        return { city: city || undefined, address: rest.join(', ') || undefined };
-      });
-    if (branches.length === 0) return;
-    setSavingBranches(true);
-    setError(null);
-    setMessage(null);
-    try {
-      const created = await addBranches(branchSourceID, branchName.trim(), branches);
-      setMessage(`Филиалы созданы: ${created.length}`);
-      setBranchLines('');
-      setBranchName('');
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось создать филиалы');
-    } finally {
-      setSavingBranches(false);
     }
   };
 

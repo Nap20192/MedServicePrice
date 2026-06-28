@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import SearchBar from '../components/SearchBar';
-import { getStats } from '../api/api';
+import { getStats, listSources } from '../api/api';
+import { SourceDetails } from '../types';
 
 const QUICK = [
   { label: 'Общий анализ крови', query: 'Общий анализ крови' },
@@ -14,23 +15,31 @@ const QUICK = [
   { label: 'Гастроскопия', query: 'Гастроскопия' },
 ];
 
-const SOURCES = ['kdlolymp.kz', 'invitro.kz', 'helix.kz', 'doq.kz', 'olymp.kz', 'medel.kz', 'emirmed.kz', 'mck.kz'];
-
 const STEPS = [
-  { n: '01', t: 'Введите услугу', d: 'Поиск с автодополнением по нормализованному справочнику услуг.' },
-  { n: '02', t: 'Отфильтруйте', d: 'Город, категория, ценовой диапазон, сортировка по цене и дате.' },
+  { n: '01', t: 'Введите услугу', d: 'Поиск с автодополнением по нормализованному справочнику услуг — по всему Казахстану.' },
+  { n: '02', t: 'Отфильтруйте', d: 'Категория, источник, ценовой диапазон, рейтинг, сортировка по цене и дате.' },
   { n: '03', t: 'Сравните', d: 'Цены клиник в одном списке. Добавьте в сравнение и выберите выгодное.' },
 ];
+
+function srcHost(url: string) {
+  try { return new URL(url).host.replace(/^www\./, ''); } catch { return url; }
+}
 
 export default function HomePage() {
   const navigate = useNavigate();
   const [stats, setStats] = useState({ totalPrices: 0, totalClinics: 0 });
+  const [sources, setSources] = useState<SourceDetails[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    getStats().then((s) => { setStats(s); setLoaded(true); }).catch(() => setLoaded(true));
+    Promise.all([getStats(), listSources()])
+      .then(([s, src]) => { setStats(s); setSources(src); })
+      .catch(() => {})
+      .finally(() => setLoaded(true));
   }, []);
 
+  const hosts = useMemo(() => [...new Set(sources.map((s) => srcHost(s.url)))], [sources]);
+  const cities = useMemo(() => new Set(sources.map((s) => s.city).filter(Boolean)).size, [sources]);
   const fmt = (n: number) => new Intl.NumberFormat('ru-RU').format(n);
 
   return (
@@ -55,14 +64,14 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Stats strip */}
+        {/* Stats strip — реальные данные */}
         <div className="border-t border-neutral-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 grid grid-cols-2 sm:grid-cols-4 divide-x divide-neutral-200 border-x border-neutral-200">
             {[
               { v: loaded ? fmt(stats.totalPrices) : '—', l: 'цен в базе' },
               { v: loaded ? fmt(stats.totalClinics) : '—', l: 'клиник' },
-              { v: '10+', l: 'городов' },
-              { v: String(SOURCES.length), l: 'источников' },
+              { v: loaded ? String(hosts.length) : '—', l: 'источников' },
+              { v: loaded ? String(cities || '—') : '—', l: 'городов' },
             ].map((s) => (
               <div key={s.l} className="px-4 py-5">
                 <p className="font-mono text-2xl font-semibold text-neutral-900">{s.v}</p>
@@ -93,14 +102,21 @@ export default function HomePage() {
       {/* Sources + How it works */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 pb-16 grid lg:grid-cols-2 gap-px bg-neutral-200 border border-neutral-200">
         <div className="bg-white p-6">
-          <h2 className="label mb-4">Источники данных</h2>
-          <div className="grid grid-cols-2 gap-px bg-neutral-200 border border-neutral-200">
-            {SOURCES.map((s) => (
-              <div key={s} className="bg-white px-3 py-2.5 font-mono text-xs text-neutral-700 flex items-center gap-2">
-                <span className="w-1 h-1 bg-neutral-900" /> {s}
-              </div>
-            ))}
+          <div className="flex items-baseline justify-between mb-4">
+            <h2 className="label">Источники данных</h2>
+            <button onClick={() => navigate('/sources')} className="text-xs text-neutral-400 hover:text-neutral-900 transition-colors">управление →</button>
           </div>
+          {hosts.length === 0 ? (
+            <p className="text-sm text-neutral-400 py-4">{loaded ? 'Источников пока нет — добавьте на странице «Источники».' : 'Загрузка…'}</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-px bg-neutral-200 border border-neutral-200">
+              {hosts.map((h) => (
+                <div key={h} className="bg-white px-3 py-2.5 font-mono text-xs text-neutral-700 flex items-center gap-2">
+                  <span className="w-1 h-1 bg-neutral-900" /> {h}
+                </div>
+              ))}
+            </div>
+          )}
           <p className="text-xs text-neutral-400 mt-4">Только открытые публичные данные. Соблюдаем robots.txt и задержки между запросами.</p>
         </div>
 

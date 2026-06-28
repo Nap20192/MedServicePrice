@@ -16,9 +16,21 @@ export default function SearchBar({ initialQuery = '', onSearch, compact = false
   const [activeSuggestion, setActiveSuggestion] = useState(-1);
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => { setQuery(initialQuery); }, [initialQuery]);
+
+  // Close the autocomplete popup on any click outside the search box.
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, []);
 
   useEffect(() => {
     clearTimeout(debounceRef.current);
@@ -52,7 +64,7 @@ export default function SearchBar({ initialQuery = '', onSearch, compact = false
   const field = compact ? 'h-9 text-sm' : 'h-12 text-[15px]';
 
   return (
-    <div className="flex relative border border-neutral-900 bg-neutral-900 gap-px">
+    <div ref={containerRef} className="flex relative border border-neutral-900 bg-neutral-900 gap-px">
       <div className="relative flex-1 bg-white">
         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
