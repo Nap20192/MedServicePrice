@@ -112,7 +112,7 @@ export default function ClinicPage() {
 
               <div className="flex flex-wrap gap-3 mt-4">
                 <a
-                  href={`https://2gis.kz/search/${encodeURIComponent(clinic.clinic_name + ' ' + clinic.address)}`}
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(clinic.clinic_name + ' ' + clinic.address)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-4 py-2 rounded-xl text-sm font-medium transition-colors"

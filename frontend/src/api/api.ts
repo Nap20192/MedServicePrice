@@ -19,6 +19,7 @@ import {
   SortMode,
   SourceCommandResult,
   SourceDetails,
+  GooglePlaceClinicCandidate,
 } from '../types';
 // MOCK отключён — используем реальный бэкенд. Оставлено закомментированным.
 // import { mockServices } from '../mock/data';
@@ -194,6 +195,27 @@ export async function createClinic(input: CreateClinicInput): Promise<ClinicReco
   return apiJson<ClinicRecord>('/clinics', {
     method: 'POST',
     body: JSON.stringify(input),
+  });
+}
+
+export async function attachSourceToClinic(sourceId: string, clinicId: string): Promise<SourceDetails> {
+  return apiJson<SourceDetails>(`/sources/${sourceId}/clinic`, {
+    method: 'POST',
+    body: JSON.stringify({ clinic_id: clinicId }),
+  });
+}
+
+export async function searchGooglePlacesClinics(query: string, location?: string): Promise<GooglePlaceClinicCandidate[]> {
+  const params = new URLSearchParams();
+  params.set('q', query);
+  if (location?.trim()) params.set('location', location.trim());
+  return apiJson<GooglePlaceClinicCandidate[]>(`/clinics/google-places/search?${params.toString()}`);
+}
+
+export async function importGooglePlaceClinic(googlePlaceId: string, sourceIds: string[] = []): Promise<ClinicRecord> {
+  return apiJson<ClinicRecord>('/clinics/google-places/import', {
+    method: 'POST',
+    body: JSON.stringify({ google_place_id: googlePlaceId, source_ids: sourceIds }),
   });
 }
 

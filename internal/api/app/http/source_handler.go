@@ -25,7 +25,17 @@ type createClinicRequest struct {
 	Address      string      `json:"address"`
 	Phone        string      `json:"phone"`
 	WorkingHours string      `json:"working_hours"`
+	URL          string      `json:"url"`
 	SourceIDs    []uuid.UUID `json:"source_ids"`
+}
+
+type attachClinicRequest struct {
+	ClinicID uuid.UUID `json:"clinic_id"`
+}
+
+type importGooglePlaceClinicRequest struct {
+	GooglePlaceID string      `json:"google_place_id"`
+	SourceIDs     []uuid.UUID `json:"source_ids"`
 }
 
 type updateSchedulerRequest struct {
@@ -96,6 +106,7 @@ func (h *sourceHandler) CreateClinic(w http.ResponseWriter, r *http.Request) {
 		Address:      req.Address,
 		Phone:        req.Phone,
 		WorkingHours: req.WorkingHours,
+		URL:          req.URL,
 		SourceIDs:    req.SourceIDs,
 	})
 	if err != nil {
@@ -114,6 +125,60 @@ func (h *sourceHandler) ListClinics(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(clinics)
+}
+
+func (h *sourceHandler) AttachSourceToClinic(w http.ResponseWriter, r *http.Request) {
+	sourceID, err := uuid.Parse(chi.URLParam(r, "sourceID"))
+	if err != nil {
+		http.Error(w, "invalid source id", http.StatusBadRequest)
+		return
+	}
+	var req attachClinicRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	details, err := h.usecase.AttachSourceToClinic(r.Context(), domain.AttachSourceClinicInput{
+		SourceID: sourceID,
+		ClinicID: req.ClinicID,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(details)
+}
+
+func (h *sourceHandler) SearchGooglePlacesClinics(w http.ResponseWriter, r *http.Request) {
+	items, err := h.usecase.SearchGooglePlacesClinics(r.Context(), domain.SearchGooglePlacesInput{
+		Query:    r.URL.Query().Get("q"),
+		Location: r.URL.Query().Get("location"),
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(items)
+}
+
+func (h *sourceHandler) ImportGooglePlaceClinic(w http.ResponseWriter, r *http.Request) {
+	var req importGooglePlaceClinicRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	clinic, err := h.usecase.ImportGooglePlaceClinic(r.Context(), domain.ImportGooglePlaceClinicInput{
+		GooglePlaceID: req.GooglePlaceID,
+		SourceIDs:     req.SourceIDs,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(clinic)
 }
 
 func (h *sourceHandler) TriggerFetch(w http.ResponseWriter, r *http.Request) {

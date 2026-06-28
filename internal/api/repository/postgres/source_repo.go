@@ -38,6 +38,7 @@ func (r *sourceRepo) GetSourceByID(ctx context.Context, id uuid.UUID) (*domain.S
 			c.address,
 			c.phone,
 			c.working_hours,
+			c.url AS clinic_url,
 			a.adapter_id
 		FROM sources s
 		LEFT JOIN clinics c ON c.id = s.clinic_id
@@ -78,6 +79,7 @@ func (r *sourceRepo) ListSources(ctx context.Context) ([]domain.SourceDetails, e
 			c.address,
 			c.phone,
 			c.working_hours,
+			c.url AS clinic_url,
 			a.adapter_id
 		FROM sources s
 		LEFT JOIN clinics c ON c.id = s.clinic_id
@@ -143,15 +145,84 @@ func NewClinicRepository(db *database.DB) domain.ClinicRepository {
 }
 
 func (r *clinicRepo) CreateClinic(ctx context.Context, clinic *domain.Clinic) error {
-	query := `INSERT INTO clinics (id, name, city, address, phone, working_hours) 
-		VALUES (:id, :name, :city, :address, :phone, :working_hours)`
+	query := `INSERT INTO clinics
+		(id, name, city, address, phone, working_hours, url, google_place_id, lat, lng, rating, reviews_count)
+		VALUES (:id, :name, :city, :address, :phone, :working_hours, :url, :google_place_id, :lat, :lng, :rating, :reviews_count)`
 	_, err := r.db.NamedExecContext(ctx, query, clinic)
 	return err
 }
 
+func (r *clinicRepo) UpsertClinic(ctx context.Context, clinic *domain.Clinic, externalRaw []byte) error {
+	var raw *string
+	if len(externalRaw) > 0 {
+		value := string(externalRaw)
+		raw = &value
+	}
+
+	existingID, found, err := r.findExistingClinicID(ctx, clinic)
+	if err != nil {
+		return err
+	}
+	if found {
+		clinic.ID = existingID
+		_, err := r.db.ExecContext(ctx, `
+			UPDATE clinics SET
+				name          = $2,
+				city          = COALESCE($3, city),
+				address       = COALESCE($4, address),
+				phone         = COALESCE($5, phone),
+				working_hours = COALESCE($6, working_hours),
+				url           = COALESCE($7, url),
+				google_place_id     = COALESCE($8, google_place_id),
+				lat           = COALESCE($9, lat),
+				lng           = COALESCE($10, lng),
+				rating        = COALESCE($11, rating),
+				reviews_count = COALESCE($12, reviews_count),
+				external_raw  = COALESCE(CAST($13 AS jsonb), external_raw)
+			WHERE id = $1`,
+			clinic.ID, clinic.Name, clinic.City, clinic.Address, clinic.Phone,
+			clinic.WorkingHours, clinic.URL, clinic.GooglePlaceID, clinic.Lat, clinic.Lng,
+			clinic.Rating, clinic.ReviewsCount, raw)
+		return err
+	}
+
+	_, err = r.db.ExecContext(ctx, `
+		INSERT INTO clinics
+			(id, name, city, address, phone, working_hours, url, google_place_id, lat, lng, rating, reviews_count, external_raw)
+		VALUES
+			($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, CAST($13 AS jsonb))`,
+		clinic.ID, clinic.Name, clinic.City, clinic.Address, clinic.Phone,
+		clinic.WorkingHours, clinic.URL, clinic.GooglePlaceID, clinic.Lat, clinic.Lng,
+		clinic.Rating, clinic.ReviewsCount, raw)
+	return err
+}
+
+func (r *clinicRepo) findExistingClinicID(ctx context.Context, clinic *domain.Clinic) (uuid.UUID, bool, error) {
+	var id uuid.UUID
+	if clinic.GooglePlaceID != nil && *clinic.GooglePlaceID != "" {
+		err := r.db.GetContext(ctx, &id, `SELECT id FROM clinics WHERE google_place_id = $1`, *clinic.GooglePlaceID)
+		if err == nil {
+			return id, true, nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return uuid.Nil, false, err
+		}
+	}
+	if clinic.URL != nil && *clinic.URL != "" {
+		err := r.db.GetContext(ctx, &id, `SELECT id FROM clinics WHERE url = $1`, *clinic.URL)
+		if err == nil {
+			return id, true, nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return uuid.Nil, false, err
+		}
+	}
+	return uuid.Nil, false, nil
+}
+
 func (r *clinicRepo) GetClinicByID(ctx context.Context, id uuid.UUID) (*domain.Clinic, error) {
 	var c domain.Clinic
-	query := `SELECT id, name, city, address, phone, working_hours FROM clinics WHERE id = $1`
+	query := `SELECT id, name, city, address, phone, working_hours, url, google_place_id, lat, lng, rating, reviews_count FROM clinics WHERE id = $1`
 	err := r.db.GetContext(ctx, &c, query, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -164,7 +235,7 @@ func (r *clinicRepo) GetClinicByID(ctx context.Context, id uuid.UUID) (*domain.C
 
 func (r *clinicRepo) ListClinics(ctx context.Context) ([]domain.Clinic, error) {
 	var clinics []domain.Clinic
-	query := `SELECT id, name, city, address, phone, working_hours FROM clinics ORDER BY name`
+	query := `SELECT id, name, city, address, phone, working_hours, url, google_place_id, lat, lng, rating, reviews_count FROM clinics ORDER BY name`
 	if err := r.db.SelectContext(ctx, &clinics, query); err != nil {
 		return nil, err
 	}
@@ -174,9 +245,22 @@ func (r *clinicRepo) ListClinics(ctx context.Context) ([]domain.Clinic, error) {
 	return clinics, nil
 }
 
+func (r *clinicRepo) FindClinicByGooglePlaceID(ctx context.Context, googlePlaceID string) (*domain.Clinic, error) {
+	var c domain.Clinic
+	query := `SELECT id, name, city, address, phone, working_hours, url, google_place_id, lat, lng, rating, reviews_count FROM clinics WHERE google_place_id = $1 LIMIT 1`
+	err := r.db.GetContext(ctx, &c, query, googlePlaceID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &c, nil
+}
+
 func (r *clinicRepo) FindClinicByNameAndCity(ctx context.Context, name, city string) (*domain.Clinic, error) {
 	var c domain.Clinic
-	query := `SELECT id, name, city, address, phone, working_hours FROM clinics WHERE name = $1 AND city = $2 LIMIT 1`
+	query := `SELECT id, name, city, address, phone, working_hours, url, google_place_id, lat, lng, rating, reviews_count FROM clinics WHERE name = $1 AND city = $2 LIMIT 1`
 	err := r.db.GetContext(ctx, &c, query, name, city)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

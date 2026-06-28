@@ -48,6 +48,7 @@ export interface SourceDetails {
   address?: string | null;
   phone?: string | null;
   working_hours?: string | null;
+  clinic_url?: string | null;
   adapter_id?: string | null;
 }
 
@@ -63,6 +64,12 @@ export interface ClinicRecord {
   address?: string | null;
   phone?: string | null;
   working_hours?: string | null;
+  url?: string | null;
+  google_place_id?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  rating?: number | null;
+  reviews_count?: number | null;
 }
 
 export interface CreateClinicInput {
@@ -71,7 +78,22 @@ export interface CreateClinicInput {
   address?: string;
   phone?: string;
   working_hours?: string;
+  url?: string;
   source_ids: string[];
+}
+
+export interface GooglePlaceClinicCandidate {
+  id: string;
+  name: string;
+  city?: string;
+  address?: string;
+  phone?: string;
+  working_hours?: string;
+  url?: string;
+  lat?: number;
+  lng?: number;
+  rating?: number;
+  reviews_count?: number;
 }
 
 export interface SchedulerSettings {

@@ -11,18 +11,20 @@ import (
 )
 
 type sourceUC struct {
-	sourceRepo  domain.SourceRepository
-	clinicRepo  domain.ClinicRepository
-	adapterRepo domain.AdapterRepository
-	publisher   domain.EventPublisher
+	sourceRepo   domain.SourceRepository
+	clinicRepo   domain.ClinicRepository
+	adapterRepo  domain.AdapterRepository
+	publisher    domain.EventPublisher
+	googlePlaces *GooglePlacesClient
 }
 
-func NewSourceUseCase(sr domain.SourceRepository, cr domain.ClinicRepository, ar domain.AdapterRepository, pub domain.EventPublisher) domain.SourceUseCase {
+func NewSourceUseCase(sr domain.SourceRepository, cr domain.ClinicRepository, ar domain.AdapterRepository, pub domain.EventPublisher, googlePlaces *GooglePlacesClient) domain.SourceUseCase {
 	return &sourceUC{
-		sourceRepo:  sr,
-		clinicRepo:  cr,
-		adapterRepo: ar,
-		publisher:   pub,
+		sourceRepo:   sr,
+		clinicRepo:   cr,
+		adapterRepo:  ar,
+		publisher:    pub,
+		googlePlaces: googlePlaces,
 	}
 }
 
@@ -90,14 +92,24 @@ func (uc *sourceUC) CreateClinic(ctx context.Context, input domain.CreateClinicI
 		return nil, fmt.Errorf("clinic name is required")
 	}
 	clinic := &domain.Clinic{
-		ID:           uuid.New(),
-		Name:         input.Name,
-		City:         optionalString(input.City),
-		Address:      optionalString(input.Address),
-		Phone:        optionalString(input.Phone),
-		WorkingHours: optionalString(input.WorkingHours),
+		ID:            uuid.New(),
+		Name:          input.Name,
+		City:          optionalString(input.City),
+		Address:       optionalString(input.Address),
+		Phone:         optionalString(input.Phone),
+		WorkingHours:  optionalString(input.WorkingHours),
+		URL:           optionalString(input.URL),
+		GooglePlaceID: optionalString(input.GooglePlaceID),
+		Lat:           input.Lat,
+		Lng:           input.Lng,
+		Rating:        input.Rating,
+		ReviewsCount:  input.ReviewsCount,
 	}
-	if err := uc.clinicRepo.CreateClinic(ctx, clinic); err != nil {
+	if input.GooglePlaceID != "" || len(input.ExternalRaw) > 0 {
+		if err := uc.clinicRepo.UpsertClinic(ctx, clinic, input.ExternalRaw); err != nil {
+			return nil, fmt.Errorf("failed to upsert clinic: %w", err)
+		}
+	} else if err := uc.clinicRepo.CreateClinic(ctx, clinic); err != nil {
 		return nil, fmt.Errorf("failed to create clinic: %w", err)
 	}
 	if err := uc.sourceRepo.AttachSourcesToClinic(ctx, clinic.ID, input.SourceIDs); err != nil {
@@ -108,6 +120,63 @@ func (uc *sourceUC) CreateClinic(ctx context.Context, input domain.CreateClinicI
 
 func (uc *sourceUC) ListClinics(ctx context.Context) ([]domain.Clinic, error) {
 	return uc.clinicRepo.ListClinics(ctx)
+}
+
+func (uc *sourceUC) AttachSourceToClinic(ctx context.Context, input domain.AttachSourceClinicInput) (*domain.SourceDetails, error) {
+	clinic, err := uc.clinicRepo.GetClinicByID(ctx, input.ClinicID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load clinic: %w", err)
+	}
+	if clinic == nil {
+		return nil, fmt.Errorf("clinic %s not found", input.ClinicID)
+	}
+	if err := uc.sourceRepo.AttachSourcesToClinic(ctx, input.ClinicID, []uuid.UUID{input.SourceID}); err != nil {
+		return nil, fmt.Errorf("failed to attach source to clinic: %w", err)
+	}
+	details, err := uc.sourceRepo.GetSourceByID(ctx, input.SourceID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to reload source: %w", err)
+	}
+	if details == nil {
+		return nil, fmt.Errorf("source %s not found", input.SourceID)
+	}
+	return details, nil
+}
+
+func (uc *sourceUC) SearchGooglePlacesClinics(ctx context.Context, input domain.SearchGooglePlacesInput) ([]domain.GooglePlaceClinicCandidate, error) {
+	if uc.googlePlaces == nil {
+		return nil, fmt.Errorf("Google Maps integration is not configured")
+	}
+	return uc.googlePlaces.SearchClinics(ctx, input)
+}
+
+func (uc *sourceUC) ImportGooglePlaceClinic(ctx context.Context, input domain.ImportGooglePlaceClinicInput) (*domain.Clinic, error) {
+	if uc.googlePlaces == nil {
+		return nil, fmt.Errorf("Google Maps integration is not configured")
+	}
+	candidate, err := uc.googlePlaces.ClinicByID(ctx, input.GooglePlaceID)
+	if err != nil {
+		return nil, err
+	}
+	clinic, err := uc.CreateClinic(ctx, domain.CreateClinicInput{
+		Name:          candidate.Name,
+		City:          candidate.City,
+		Address:       candidate.Address,
+		Phone:         candidate.Phone,
+		WorkingHours:  candidate.WorkingHours,
+		URL:           candidate.URL,
+		GooglePlaceID: candidate.ID,
+		Lat:           candidate.Lat,
+		Lng:           candidate.Lng,
+		Rating:        candidate.Rating,
+		ReviewsCount:  candidate.ReviewsCount,
+		ExternalRaw:   candidate.Raw,
+		SourceIDs:     input.SourceIDs,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return clinic, nil
 }
 
 func (uc *sourceUC) TriggerFetch(ctx context.Context, sourceID uuid.UUID) (*domain.SourceCommandResult, error) {

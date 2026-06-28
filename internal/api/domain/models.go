@@ -7,12 +7,18 @@ import (
 )
 
 type Clinic struct {
-	ID           uuid.UUID `json:"id" db:"id"`
-	Name         string    `json:"name" db:"name"`
-	City         *string   `json:"city,omitempty" db:"city"`
-	Address      *string   `json:"address,omitempty" db:"address"`
-	Phone        *string   `json:"phone,omitempty" db:"phone"`
-	WorkingHours *string   `json:"working_hours,omitempty" db:"working_hours"`
+	ID            uuid.UUID `json:"id" db:"id"`
+	Name          string    `json:"name" db:"name"`
+	City          *string   `json:"city,omitempty" db:"city"`
+	Address       *string   `json:"address,omitempty" db:"address"`
+	Phone         *string   `json:"phone,omitempty" db:"phone"`
+	WorkingHours  *string   `json:"working_hours,omitempty" db:"working_hours"`
+	URL           *string   `json:"url,omitempty" db:"url"`
+	GooglePlaceID *string   `json:"google_place_id,omitempty" db:"google_place_id"`
+	Lat           *float64  `json:"lat,omitempty" db:"lat"`
+	Lng           *float64  `json:"lng,omitempty" db:"lng"`
+	Rating        *float64  `json:"rating,omitempty" db:"rating"`
+	ReviewsCount  *int      `json:"reviews_count,omitempty" db:"reviews_count"`
 }
 
 type Source struct {
@@ -30,6 +36,7 @@ type SourceDetails struct {
 	Address      *string    `json:"address,omitempty" db:"address"`
 	Phone        *string    `json:"phone,omitempty" db:"phone"`
 	WorkingHours *string    `json:"working_hours,omitempty" db:"working_hours"`
+	ClinicURL    *string    `json:"clinic_url,omitempty" db:"clinic_url"`
 	AdapterID    *string    `json:"adapter_id,omitempty" db:"adapter_id"`
 }
 
@@ -43,6 +50,21 @@ type Adapter struct {
 type SchedulerSettings struct {
 	FetchIntervalHours int       `json:"fetch_interval_hours" db:"fetch_interval_hours"`
 	UpdatedAt          time.Time `json:"updated_at" db:"updated_at"`
+}
+
+type GooglePlaceClinicCandidate struct {
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	City         string   `json:"city,omitempty"`
+	Address      string   `json:"address,omitempty"`
+	Phone        string   `json:"phone,omitempty"`
+	WorkingHours string   `json:"working_hours,omitempty"`
+	URL          string   `json:"url,omitempty"`
+	Lat          *float64 `json:"lat,omitempty"`
+	Lng          *float64 `json:"lng,omitempty"`
+	Rating       *float64 `json:"rating,omitempty"`
+	ReviewsCount *int     `json:"reviews_count,omitempty"`
+	Raw          []byte   `json:"-"`
 }
 
 type ServiceCategory string

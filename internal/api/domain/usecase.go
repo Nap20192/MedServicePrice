@@ -12,12 +12,34 @@ type CreateSourceInput struct {
 }
 
 type CreateClinicInput struct {
-	Name         string
-	City         string
-	Address      string
-	Phone        string
-	WorkingHours string
-	SourceIDs    []uuid.UUID
+	Name          string
+	City          string
+	Address       string
+	Phone         string
+	WorkingHours  string
+	URL           string
+	GooglePlaceID string
+	Lat           *float64
+	Lng           *float64
+	Rating        *float64
+	ReviewsCount  *int
+	ExternalRaw   []byte
+	SourceIDs     []uuid.UUID
+}
+
+type AttachSourceClinicInput struct {
+	SourceID uuid.UUID
+	ClinicID uuid.UUID
+}
+
+type SearchGooglePlacesInput struct {
+	Query    string
+	Location string
+}
+
+type ImportGooglePlaceClinicInput struct {
+	GooglePlaceID string
+	SourceIDs     []uuid.UUID
 }
 
 type SourceCommandResult struct {
@@ -32,6 +54,9 @@ type SourceUseCase interface {
 	ListSources(ctx context.Context) ([]SourceDetails, error)
 	CreateClinic(ctx context.Context, input CreateClinicInput) (*Clinic, error)
 	ListClinics(ctx context.Context) ([]Clinic, error)
+	AttachSourceToClinic(ctx context.Context, input AttachSourceClinicInput) (*SourceDetails, error)
+	SearchGooglePlacesClinics(ctx context.Context, input SearchGooglePlacesInput) ([]GooglePlaceClinicCandidate, error)
+	ImportGooglePlaceClinic(ctx context.Context, input ImportGooglePlaceClinicInput) (*Clinic, error)
 	TriggerFetch(ctx context.Context, sourceID uuid.UUID) (*SourceCommandResult, error)
 	TriggerFetchAll(ctx context.Context, trigger string) (int, error)
 	RebuildAdapter(ctx context.Context, sourceID uuid.UUID) (*SourceCommandResult, error)

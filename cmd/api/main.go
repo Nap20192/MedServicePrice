@@ -92,7 +92,12 @@ func main() {
 	)
 
 	// 4. Initialize UseCases
-	sourceUC := usecase.NewSourceUseCase(sourceRepo, clinicRepo, adapterRepo, adapterPublisher)
+	googlePlacesKey := os.Getenv("GOOGLE_MAPS_API_KEY")
+	if googlePlacesKey == "" {
+		googlePlacesKey = os.Getenv("GOOGLE_PLACES_API_KEY")
+	}
+	googlePlaces := usecase.NewGooglePlacesClient(googlePlacesKey, os.Getenv("GOOGLE_PLACES_BASE_URL"))
+	sourceUC := usecase.NewSourceUseCase(sourceRepo, clinicRepo, adapterRepo, adapterPublisher, googlePlaces)
 	priceUC := usecase.NewPriceUseCase(priceRepo)
 	schedulerUC := usecase.NewFetchScheduler(schedulerRepo, sourceUC)
 
