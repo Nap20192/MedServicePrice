@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import signal
 import uuid
 from datetime import datetime, timezone
@@ -234,16 +235,34 @@ async def _resolve_source(con, adapter_id: str, url: str) -> str | None:
     return str(row["source_id"]) if row else None
 
 
-async def _ensure_adapter_ready(base_url: str, *, force_rediscover: bool = False) -> None:
+def _normalize_url(u: str) -> str:
+    """Repair a source URL: ensure a scheme + '//'. Sources arrive as 'helix.kz' or
+    even 'https:helix.kz' (missing slashes), which urlparse reads with an empty
+    netloc -> empty domain -> broken fetch ('https:///helix.kz'). Fix both."""
+    u = (u or "").strip()
+    if not u:
+        return u
+    m = re.match(r"^(https?):/{0,2}(.*)$", u, re.IGNORECASE)
+    if m:
+        return f"{m.group(1).lower()}://{m.group(2)}"
+    return "https://" + u
+
+
+async def _ensure_adapter_ready(base_url: str, *, force_rediscover: bool = False) -> bool:
+    """Build/refresh the adapter. Returns True if it has data URLs. A site we can't
+    crawl (bad URL/TLS, blocked, empty) returns False instead of raising, so one dead
+    source never dead-letters and poisons the queue."""
     domain = host(base_url)
     adapter = SiteAdapter.load(domain)
     if force_rediscover or cfg.REDISCOVER or adapter is None or not adapter.data_urls:
         if force_rediscover or cfg.REDISCOVER:
             log.info("rediscovering adapter domain=%s", domain)
         adapter = await create_or_update_adapter(base_url)
-    if adapter is None or not adapter.data_urls:
-        raise RuntimeError(
-            f"adapter for domain={domain} has no data URLs after discovery")
+    ready = adapter is not None and bool(adapter.data_urls)
+    if not ready:
+        log.warning("adapter for domain=%s has no data URLs after discovery "
+                    "(unreachable/blocked/empty) — source kept, adapter pending", domain)
+    return ready
 
 
 # -- handlers ------------------------------------------------------------------
@@ -255,11 +274,13 @@ class Worker:
 
     async def handle_create(self, data: dict) -> None:
         adapter_name = data.get("name") or "unknown adapter"
-        base_url = data["base_url"]
+        base_url = _normalize_url(data["base_url"])
         config = data.get("config") or {}
         _apply_run_knobs(config)
         log.info("adapter.create received name=%s domain=%s", adapter_name, host(base_url))
-        await _ensure_adapter_ready(base_url, force_rediscover=_truthy(config.get("rediscover")))
+        ready = await _ensure_adapter_ready(base_url, force_rediscover=_truthy(config.get("rediscover")))
+        # Register the source either way so it's tracked; if discovery found nothing
+        # the adapter stays pending and can be retried, instead of dead-lettering.
         async with self.pool.acquire() as con:
             await _register_source(
                 con,
@@ -269,17 +290,24 @@ class Worker:
                 config,
                 data.get("source_id"),
             )
+        if not ready:
+            log.warning("adapter.create: no data URLs domain=%s — source registered, adapter pending",
+                        host(base_url))
 
     async def handle_fetch(self, data: dict) -> None:
         adapter_name = data.get("name") or "unknown adapter"
-        url = data["url"]
+        url = _normalize_url(data["url"])
         config = data.get("config") or {}
-        base_url = data.get("base_url") or url
+        base_url = _normalize_url(data.get("base_url") or url)
         _apply_run_knobs(config)
-        await _ensure_adapter_ready(
+        ready = await _ensure_adapter_ready(
             base_url,
             force_rediscover=_truthy(config.get("rediscover")),
         )
+        if not ready:
+            log.warning("adapter.fetch: no data URLs domain=%s — nothing to fetch, skipping",
+                        host(url))
+            return
 
         source_id = None
         async with self.pool.acquire() as con:
