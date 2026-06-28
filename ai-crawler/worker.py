@@ -251,6 +251,7 @@ class Worker:
     def __init__(self, pool: asyncpg.Pool, exchange: aio_pika.abc.AbstractExchange):
         self.pool = pool
         self.exchange = exchange
+        self.event_lock = asyncio.Lock()
 
     async def handle_create(self, data: dict) -> None:
         adapter_id = data["adapter_id"]
@@ -342,7 +343,12 @@ class Worker:
                         log.info("skip already-processed msg_id=%s rk=%s", msg_id, rk)
                         await message.ack()
                         return
-                await handler(data)
+                if self.event_lock.locked():
+                    log.info("event waiting rk=%s msg_id=%s", rk, msg_id)
+                async with self.event_lock:
+                    log.info("event started rk=%s msg_id=%s", rk, msg_id)
+                    await handler(data)
+                    log.info("event finished rk=%s msg_id=%s", rk, msg_id)
                 async with self.pool.acquire() as con:
                     await _mark_processed(con, msg_id, rk)
                 await message.ack()
@@ -354,14 +360,15 @@ class Worker:
 
 async def main() -> None:
     log_llm_config()
+    effective_prefetch = 1
     log.info("worker starting rabbitmq_url=%s postgres_url=%s sink=%s prefetch=%d declare_topology=%s",
-             safe_url(RABBITMQ_URL), safe_url(DATABASE_URL), SINK, WORKER_PREFETCH,
+             safe_url(RABBITMQ_URL), safe_url(DATABASE_URL), SINK, effective_prefetch,
              WORKER_DECLARE_TOPOLOGY)
 
     pool = await asyncpg.create_pool(asyncpg_dsn(DATABASE_URL), min_size=1, max_size=10)
     connection = await aio_pika.connect_robust(RABBITMQ_URL)
     channel = await connection.channel()
-    await channel.set_qos(prefetch_count=WORKER_PREFETCH)
+    await channel.set_qos(prefetch_count=effective_prefetch)
 
     if WORKER_DECLARE_TOPOLOGY:
         exchange, q_create, q_fetch = await _ensure_topology(channel)

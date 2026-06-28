@@ -12,28 +12,8 @@ crawl:
   agent_batch_size: 12
   agent_links_per_page: 90
   rediscover: true
-  discovery_city_slugs:
-    - astana
-    - almaty
-    - aktau
-    - aktobe
-    - atyrau
-    - karaganda
-    - kostanay
-    - pavlodar
-    - saran
-    - semey
-    - shymkent
-    - taraz
-    - uralsk
-    - oskemen
-  discovery_seed_templates:
-    - /analizes/for-doctors/{city}
-    - /analizes/profi/{city}
-    - /{city}/radiology
-  invitro_seed_paths:
-    - /analizes/for-doctors/
-    - /analizes/profi/
+  # Discovery starts only from the user/source URL and follows real page links.
+  # It does not generate guessed paths/city URLs, which avoids noisy 404s.
 
 browser:
   # Debug-only. When true, Playwright opens a visible browser window.

@@ -6,17 +6,15 @@ first. Extraction is generic and tolerant of real-world nesting: a "record" is a
 object whose subtree carries both a name-like and a price-like field — even when, as on
 kdlolymp, the name sits in `translation.title` and the price in a nested `price.price`.
 
-Many KZ med APIs are city-scoped (`?city_slug=astana`); when the bare endpoint yields
-nothing we probe the known city slugs. Best-effort: endpoint errors are logged & skipped.
+Best-effort: endpoint errors are logged & skipped. The fetcher only requests endpoints
+found during discovery; it does not guess city/query variants.
 """
 from __future__ import annotations
 
 import re
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
-
 import httpx
 
-from crawler.config import DISCOVERY_CITY_SLUGS, get_logger
+from crawler.config import get_logger
 
 log = get_logger(__name__)
 
@@ -98,13 +96,6 @@ def _harvest(node, url: str, out: list[dict], city: str | None = None) -> None:
             _harvest(item, url, out, city)
 
 
-def _add_param(url: str, key: str, value: str) -> str:
-    parts = urlparse(url)
-    q = dict(parse_qsl(parts.query))
-    q[key] = value
-    return urlunparse(parts._replace(query=urlencode(q)))
-
-
 async def _pull(client: httpx.AsyncClient, url: str, out: list[dict],
                 cap: int, city: str | None = None) -> int:
     before = len(out)
@@ -129,13 +120,6 @@ async def fetch_api_rows(endpoints: list[dict], domain: str, *, cap: int = 50000
             if not url:
                 continue
             got = await _pull(client, url, rows, cap)
-            if got == 0:
-                # City-scoped API: the bare call is empty — probe known city slugs.
-                for slug in DISCOVERY_CITY_SLUGS:
-                    if len(rows) >= cap:
-                        break
-                    n = await _pull(client, _add_param(url, "city_slug", slug), rows, cap, city=slug)
-                    if n:
-                        log.info("api endpoint city=%s url=%s rows=%d", slug, url, n)
-            log.info("api endpoint fetched domain=%s url=%s total_rows=%d", domain, url, len(rows))
+            log.info("api endpoint fetched domain=%s url=%s rows=%d total_rows=%d",
+                     domain, url, got, len(rows))
     return rows

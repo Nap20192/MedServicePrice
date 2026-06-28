@@ -18,6 +18,13 @@ type ParseCompletedPayload struct {
 	ParsedAt      time.Time `json:"parsed_at"`
 }
 
+type SourceInfo struct {
+	ID         uuid.UUID `db:"id"`
+	URL        string    `db:"url"`
+	City       *string   `db:"city"`
+	ClinicName *string   `db:"clinic_name"`
+}
+
 // RawRow is an active parsed_services row (the raw layer) for one source.
 type RawRow struct {
 	ID           uuid.UUID `db:"id"`
@@ -25,6 +32,7 @@ type RawRow struct {
 	PriceKZT     float64   `db:"price_kzt"`
 	Currency     string    `db:"currency"`
 	DurationDays *int      `db:"duration_days"`
+	Category     *string   `db:"category"`
 	ParsedAt     time.Time `db:"parsed_at"`
 }
 
@@ -64,9 +72,11 @@ type LLMMatcher interface {
 // service is the only reader of parsed_services (raw); it publishes into
 // service_offers (gold), which the API reads.
 type Repository interface {
-	// SourceCity returns the source's city (nil if unset) and whether the source
-	// exists. A missing source means nothing to normalize — caller skips.
-	SourceCity(ctx context.Context, sourceID uuid.UUID) (city *string, found bool, err error)
+	// SourceInfo returns source metadata for logs and offer city. A missing source
+	// means nothing to normalize — caller skips.
+	SourceInfo(ctx context.Context, sourceID uuid.UUID) (*SourceInfo, bool, error)
+	// PendingSourceIDs returns sources with active raw rows not yet seen by normalize.
+	PendingSourceIDs(ctx context.Context, limit int) ([]uuid.UUID, error)
 	// LoadActiveRows returns the source's active raw rows.
 	LoadActiveRows(ctx context.Context, sourceID uuid.UUID) ([]RawRow, error)
 	// Match resolves a raw name to a catalog id via alias -> exact -> fuzzy.

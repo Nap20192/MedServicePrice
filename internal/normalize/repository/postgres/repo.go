@@ -19,24 +19,48 @@ func NewRepository(db *database.DB) ndomain.Repository {
 	return &repository{db: db}
 }
 
-// SourceCity returns the source's city (nil if unset) and whether the source
-// exists. Unknown source -> found=false so the caller skips.
-func (r *repository) SourceCity(ctx context.Context, sourceID uuid.UUID) (*string, bool, error) {
-	var city *string
-	err := r.db.GetContext(ctx, &city,
-		`SELECT city FROM sources WHERE id = $1`, sourceID)
+// SourceInfo returns source metadata. Unknown source -> found=false so the caller skips.
+func (r *repository) SourceInfo(ctx context.Context, sourceID uuid.UUID) (*ndomain.SourceInfo, bool, error) {
+	var info ndomain.SourceInfo
+	err := r.db.GetContext(ctx, &info, `
+		SELECT
+			s.id,
+			s.url,
+			s.city::text AS city,
+			c.name AS clinic_name
+		FROM sources s
+		LEFT JOIN clinics c ON c.id = s.clinic_id
+		WHERE s.id = $1`, sourceID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, false, nil
 	}
 	if err != nil {
 		return nil, false, err
 	}
-	return city, true, nil
+	return &info, true, nil
+}
+
+func (r *repository) PendingSourceIDs(ctx context.Context, limit int) ([]uuid.UUID, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	const q = `
+		SELECT source_id
+		FROM parsed_services
+		WHERE is_active AND normalized_at IS NULL
+		GROUP BY source_id
+		ORDER BY max(parsed_at) DESC
+		LIMIT $1`
+	var ids []uuid.UUID
+	if err := r.db.SelectContext(ctx, &ids, q, limit); err != nil {
+		return nil, err
+	}
+	return ids, nil
 }
 
 func (r *repository) LoadActiveRows(ctx context.Context, sourceID uuid.UUID) ([]ndomain.RawRow, error) {
 	const q = `
-		SELECT id, service_name_raw, price_kzt, currency, duration_days, parsed_at
+		SELECT id, service_name_raw, price_kzt, currency, duration_days, category, parsed_at
 		FROM parsed_services
 		WHERE source_id = $1 AND is_active`
 	var rows []ndomain.RawRow
@@ -50,6 +74,7 @@ func (r *repository) LoadActiveRows(ctx context.Context, sourceID uuid.UUID) ([]
 //  1. alias  — exact key hit on a known synonym/abbreviation
 //  2. catalog — exact key hit on the canonical name
 //  3. fuzzy  — pg_trgm similarity above threshold (best candidate)
+//
 // Keys are computed by msp_name_key() in SQL so both sides normalize identically.
 func (r *repository) Match(ctx context.Context, rawName string) (uuid.UUID, string, error) {
 	var id uuid.UUID

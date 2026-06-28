@@ -106,8 +106,48 @@ func main() {
 		}
 	}()
 
+	go runPendingSweep(context.Background(), svc, appLogger)
+
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	appLogger.Info("normalize shutting down")
+}
+
+func runPendingSweep(ctx context.Context, svc *normuc.Service, log rabbitmq.Logger) {
+	interval := 5 * time.Minute
+	if v, err := strconv.Atoi(os.Getenv("NORMALIZE_SWEEP_INTERVAL_S")); err == nil {
+		if v <= 0 {
+			log.Info("normalize pending sweep disabled")
+			return
+		}
+		interval = time.Duration(v) * time.Second
+	}
+	limit := 20
+	if v, err := strconv.Atoi(os.Getenv("NORMALIZE_SWEEP_LIMIT")); err == nil && v > 0 {
+		limit = v
+	}
+
+	run := func() {
+		processed, err := svc.ProcessPending(ctx, limit)
+		if err != nil {
+			log.Error("normalize pending sweep failed", "err", err)
+			return
+		}
+		if processed > 0 {
+			log.Info("normalize pending sweep completed", "processed_sources", processed)
+		}
+	}
+
+	run()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			run()
+		}
+	}
 }

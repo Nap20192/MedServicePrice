@@ -24,13 +24,27 @@ func NewConsumer(svc *usecase.Service, log rabbitmq.Logger) *Consumer {
 // Nack(requeue=false) on failure so the message dead-letters via q.parse.completed's DLX.
 func (c *Consumer) Handler(ctx context.Context, messages <-chan amqp.Delivery) {
 	for msg := range messages {
+		c.log.Info("normalize delivery received",
+			"routing_key", msg.RoutingKey,
+			"message_id", msg.MessageId,
+			"type", msg.Type,
+			"bytes", len(msg.Body))
 		if err := c.svc.ProcessParseCompleted(ctx, msg.Body); err != nil {
-			c.log.Error("normalize failed — dead-lettering", "err", err)
+			c.log.Error("normalize failed — dead-lettering",
+				"message_id", msg.MessageId,
+				"routing_key", msg.RoutingKey,
+				"err", err)
 			_ = msg.Nack(false, false)
 			continue
 		}
 		if err := msg.Ack(false); err != nil {
-			c.log.Error("ack failed", "err", err)
+			c.log.Error("normalize ack failed",
+				"message_id", msg.MessageId,
+				"err", err)
+			continue
 		}
+		c.log.Info("normalize delivery acked",
+			"message_id", msg.MessageId,
+			"routing_key", msg.RoutingKey)
 	}
 }

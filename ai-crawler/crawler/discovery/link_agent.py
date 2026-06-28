@@ -13,9 +13,8 @@ from urllib.parse import urlparse
 from crawler.common import patterns as P
 from crawler.common.canonical import canonical_url
 from crawler.extract.category import OTHER, categorize
-from crawler.config import (ADAPTER_LISTING_ROW_THRESHOLD, DISCOVERY_CITY_SLUGS,
-                     DISCOVERY_SEED_TEMPLATES, INVITRO_SEED_PATHS,
-                     JUNK_URL_PATTERNS, PRICE_KEYWORDS, get_logger)
+from crawler.config import (ADAPTER_LISTING_ROW_THRESHOLD, JUNK_URL_PATTERNS,
+                            PRICE_KEYWORDS, get_logger)
 from crawler.routing.routes import host, route_template, template_to_glob
 
 log = get_logger(__name__)
@@ -83,26 +82,6 @@ CITY_HINTS = (
     "oskemen",
 )
 
-GENERIC_SEED_PATHS = (
-    "/services",
-    "/service",
-    "/uslugi",
-    "/price",
-    "/prices",
-    "/pricelist",
-    "/catalog",
-    "/doctors",
-    "/doctor",
-    "/vrachi",
-    "/clinics",
-    "/clinic",
-    "/kliniki",
-    "/napravleniya",
-    "/specialists",
-    "/search",
-)
-
-
 @dataclass(frozen=True)
 class LinkDecision:
     action: str
@@ -138,9 +117,7 @@ class LinkAgent:
         self.follow_reasons: dict[str, int] = {}
         self._order = 0
         self.add(self.start_url, 0, 100.0, "start-url")
-        if "invitro." not in self.domain:
-            self._seed_generic_candidates()
-        self._seed_site_candidates()
+        log.debug("agent frontier initialized domain=%s seeds=start-url-only", self.domain)
 
     def add(self, url: str, depth: int, score: float, reason: str) -> bool:
         url = canonical_url(url, self.start_url)
@@ -179,29 +156,6 @@ class LinkAgent:
         if rows:
             tmpl = route_template(url)
             self.follow_reasons[f"productive:{tmpl}"] = self.follow_reasons.get(f"productive:{tmpl}", 0) + 1
-
-    def _seed_generic_candidates(self) -> None:
-        for path in GENERIC_SEED_PATHS:
-            self.add(path, 1, 58.0, "seed-generic-catalog")
-        for city in CITY_HINTS[:8]:
-            for path in (f"/{city}/services", f"/{city}/doctors", f"/{city}/clinics"):
-                self.add(path, 1, 52.0, "seed-generic-city")
-
-    def _seed_site_candidates(self) -> None:
-        if "invitro." in self.domain:
-            for path in INVITRO_SEED_PATHS:
-                self.add(path, 1, 88.0, "seed-invitro-catalog")
-        if "kdlolymp." in self.domain:
-            for city in DISCOVERY_CITY_SLUGS:
-                for path in (
-                    f"/pricelist/{city}",
-                    f"/pricelist/{city}/",
-                    f"/price-list/{city}",
-                ):
-                    self.add(path, 1, 92.0, "seed-pricelist")
-        if len(self.frontier) > 1:
-            log.debug("agent seeded frontier domain=%s candidates=%d (start-url + site seeds)",
-                     self.domain, len(self.frontier))
 
     def consider_page_links(self, page, depth: int) -> int:
         candidates = []

@@ -97,30 +97,6 @@ AGENT_BATCH_SIZE = max(
     1, int(os.environ.get("AGENT_BATCH_SIZE", str(min(CONCURRENCY, 8))))
 )
 AGENT_LINKS_PER_PAGE = max(1, int(os.environ.get("AGENT_LINKS_PER_PAGE", "40")))
-DISCOVERY_CITY_SLUGS = [
-    s.strip()
-    for s in os.environ.get(
-        "DISCOVERY_CITY_SLUGS",
-        "astana,aktau,aktobe,saran",
-    ).split(",")
-    if s.strip()
-]
-DISCOVERY_SEED_TEMPLATES = [
-    s.strip()
-    for s in os.environ.get(
-        "DISCOVERY_SEED_TEMPLATES",
-        "/analizes/for-doctors/{city},/analizes/profi/{city},/{city}/radiology",
-    ).split(",")
-    if s.strip()
-]
-INVITRO_SEED_PATHS = [
-    s.strip()
-    for s in os.environ.get(
-        "INVITRO_SEED_PATHS",
-        "/analizes/for-doctors/,/analizes/profi/",
-    ).split(",")
-    if s.strip()
-]
 # Repeat runs auto-COLLECT (just gather from the saved adapter). Force a full
 # re-discovery (rebuild the adapter) with REDISCOVER=1.
 REDISCOVER = os.environ.get("REDISCOVER", "0") != "0"

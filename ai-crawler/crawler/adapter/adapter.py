@@ -26,7 +26,7 @@ from crawler.config import (ADAPTER_COMPACT, ADAPTER_DIR, ADAPTER_LISTING_ROW_TH
 from crawler.output.output import url_filename
 from crawler.extract.record import OUTPUT_SCHEMA
 from crawler.common.models import FetchPlan
-from crawler.routing.routes import route_template
+from crawler.routing.routes import is_legacy_guessed_url, route_template
 from crawler.extract.schema import list_schema_signatures, load_schema
 from crawler.routing.urlinfo import url_metadata
 
@@ -73,10 +73,18 @@ def _is_junk_url(url: str) -> bool:
     return any(fnmatch(url, pat) for pat in JUNK_URL_PATTERNS)
 
 
+def _drop_legacy_guesses(urls: list[str]) -> list[str]:
+    kept = [url for url in urls if not is_legacy_guessed_url(url)]
+    dropped = len(urls) - len(kept)
+    if dropped:
+        log.info("adapter dropped legacy guessed urls count=%d", dropped)
+    return kept
+
+
 def _compact_urls(urls: list[str], store) -> list[str]:
     # Always drop junk-pattern URLs (offices/news/etc), even ones inherited from
     # stale state, so the adapter never re-fetches price-less pages.
-    urls = [url for url in urls if not _is_junk_url(url)]
+    urls = _drop_legacy_guesses([url for url in urls if not _is_junk_url(url)])
     if not ADAPTER_COMPACT:
         return sorted(urls)
 
@@ -146,7 +154,9 @@ class SiteAdapter:
         except json.JSONDecodeError:
             return None
         if isinstance(data.get("data_urls"), list):
-            data["data_urls"] = sorted({canonical_url(url) for url in data["data_urls"] if url})
+            data["data_urls"] = _drop_legacy_guesses(
+                sorted({canonical_url(url) for url in data["data_urls"] if url})
+            )
         if isinstance(data.get("url_meta"), dict):
             data["url_meta"] = {
                 canonical_url(url): meta
@@ -180,9 +190,8 @@ class SiteAdapter:
                     current["decision"] = "fetch"
                     current["role"] = "data"
             data["route_rules"] = route_rules
-        if not data.get("page_groups") and data.get("url_nodes") and data.get("data_urls"):
-            data["page_groups"] = build_page_groups(data["url_nodes"], data["data_urls"])
-        if not data.get("fetch_plan") and data.get("data_urls"):
+        if data.get("data_urls"):
+            data["page_groups"] = build_page_groups(data.get("url_nodes", {}), data["data_urls"])
             data["fetch_plan"] = build_fetch_plan(data.get("data_urls", []), data.get("url_nodes", {}))
         return cls(**{k: data[k] for k in data if k in cls.__dataclass_fields__})
 

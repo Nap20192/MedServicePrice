@@ -22,6 +22,25 @@ from crawler.output.output import url_filename
 
 log = get_logger(__name__)
 
+_CITY_SLUGS = {
+    "astana",
+    "almaty",
+    "aktau",
+    "aktobe",
+    "atyrau",
+    "karaganda",
+    "kostanay",
+    "pavlodar",
+    "saran",
+    "semey",
+    "shymkent",
+    "taraz",
+    "uralsk",
+    "oskemen",
+}
+_LEGACY_GUESSED_ROOTS = {"services", "doctors", "clinics", "analizes", "pricelist", "price-list"}
+_LEGACY_GUESSED_INVITRO_ROOTS = {"for-doctors", "profi"}
+
 
 def host(url: str) -> str:
     return urlparse(url).netloc
@@ -59,6 +78,22 @@ def template_to_glob(template: str) -> str:
     return "*" + re.sub(r"\{id\}", "*", template).rstrip("/") + "/*"
 
 
+def is_legacy_guessed_url(url: str) -> bool:
+    segments = [seg for seg in urlparse(url).path.split("/") if seg]
+    if len(segments) >= 2 and segments[0] in _CITY_SLUGS and segments[1] in _LEGACY_GUESSED_ROOTS:
+        return True
+    if len(segments) >= 2 and segments[0] in {"pricelist", "price-list"} and segments[1] in _CITY_SLUGS:
+        return True
+    if (
+        len(segments) >= 3
+        and segments[0] == "analizes"
+        and segments[1] in _LEGACY_GUESSED_INVITRO_ROOTS
+        and segments[2] in _CITY_SLUGS
+    ):
+        return True
+    return False
+
+
 class RouteStore:
     """Per-domain route stats + useful data-URLs, persisted across runs."""
 
@@ -92,7 +127,7 @@ class RouteStore:
             self.data_urls = {
                 canonical_url(l.strip())
                 for l in self.urls_path.read_text(encoding="utf-8").splitlines()
-                if l.strip()
+                if l.strip() and not is_legacy_guessed_url(l.strip())
             }
         if self.url_stats_path.exists():
             try:
@@ -162,6 +197,9 @@ class RouteStore:
         self._t(template)["rows"] += n_rows
         if n_rows:
             key = canonical_url(url)
+            if is_legacy_guessed_url(key):
+                log.debug("skip legacy guessed data url=%s rows=%d", key, n_rows)
+                return
             self.data_urls.add(key)
             stat = self.url_stats.setdefault(
                 key,
@@ -230,7 +268,7 @@ class RouteStore:
 
     def set_data_urls(self, urls: list[str]) -> None:
         """Replace persisted useful URLs with the adapter-selected compact set."""
-        selected = {canonical_url(url) for url in urls}
+        selected = {canonical_url(url) for url in urls if not is_legacy_guessed_url(url)}
         self.data_urls = selected
         self.url_stats = {
             url: stats for url, stats in self.url_stats.items()

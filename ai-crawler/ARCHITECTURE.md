@@ -138,7 +138,7 @@ Persisted artifacts (all gitignored, regenerated):
 `DISCOVERY_MODE=agent` (default) uses `LinkAgent` — a deterministic,
 explainable link-selection policy (not an LLM agent):
 
-1. Seed the frontier with the start URL + site-specific seeds (city listings).
+1. Seed the frontier with only the start URL. No guessed paths or city URLs are generated.
 2. Each iteration pops a batch (`AGENT_BATCH_SIZE`) of highest-scored URLs, fetches them.
 3. Each fetched page is processed (extracted). Productive pages → data-URLs.
 4. Links on each page are scored by `LinkAgent.decide()`:
@@ -276,9 +276,9 @@ setting is just an env var.
 ## 10. How to change / extend
 
 **Add a new site** — usually nothing. Run `adapter <url>`; the generic discovery +
-tiers handle it. If discovery doesn't reach the price pages, add path hints to
-`STRONG_PATH_HINTS` (`crawler/discovery/link_agent.py`); optionally add seed
-templates (`DISCOVERY_SEED_TEMPLATES`).
+tiers handle it. If discovery doesn't reach the price pages, pass a more specific
+source URL that links to the catalog, or add path hints to `STRONG_PATH_HINTS`
+(`crawler/discovery/link_agent.py`).
 
 **Add an extraction layout** — write `extract_<x>(url, html|md)` in
 `crawler/extract/extract.py` returning `(rows, lines)`, add a detector, and wire it
@@ -331,7 +331,8 @@ junk rows.
 - GPU usage during fetch → a headless browser launched; already GPU-disabled, and
   fetch is HTTP-first. Check `fetch_plan.browser_urls` if a site is wrongly browser-routed.
 - "found no data URLs" → discovery never reached/parsed price pages. Inspect the
-  `agent expand` logs (DEBUG) for skip reasons; add path hints / seeds; or enable MCP.
+  `agent expand` logs (DEBUG) for skip reasons; use a more specific source URL,
+  add path hints, or enable MCP.
 - Output is per-domain `<slug>-prices.jsonl`; set `OUTPUT_PATH` to force one file.
 
 ---
